@@ -1,0 +1,37 @@
+[package]
+name = "zero2prod"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+path = "src/main.rs"
+name = "zero2prod"
+
+[dependencies]
+actix-web = "4.9.0"
+chrono = {version = "0.4.39", default-features=false, features = ["clock"]}
+config = "0.15.5"
+reqwest = "0.12.12"
+serde = {version = "1", features = ["derive"]}
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+uuid = {version="1.11.1", features = ["v4"]}
+
+[dependencies.sqlx]
+version="0.8"
+default-features=false
+features = [
+    "runtime-tokio-rustls",
+    "macros",
+    "postgres",
+    "uuid",
+    "chrono",
+    "migrate",
+]
+
+
+# faster linking with lld
+[target.x86_64-apple-darwin]
+rustflags = ["-C", "link-arg=-fuse-ld=lld"]

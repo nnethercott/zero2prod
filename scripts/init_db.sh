@@ -1,6 +1,11 @@
 set -x # lists all commands run
 set -eo pipefail # something about nonzero exit
 
+# -e: exit if any command has non-zero exit status
+# -x print commands
+# -o prevents error masking when pipeing, if we do "command | another" then the exit
+# status is that of the command that failed
+
 # check we have dependencies installed
 if ![-x "$(command -v psql)"]; then
     echo >&2 "Error; psql not installed!"
@@ -27,7 +32,7 @@ then
         -e POSTGRES_DB=${DB_NAME} \
         -e POSTGRES_HOST=${DB_HOST} \
         -e POSTGRES_PORT=${DB_PORT} \
-        -p ${DB_PORT}:5432 \
+        -p ${DB_PORT}:${DB_PORT} \
         -d postgres \
         postgres -N 1000
 fi

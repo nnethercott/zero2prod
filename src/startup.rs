@@ -2,9 +2,10 @@ use serde::Deserialize;
 use sqlx::PgPool;
 use std::{fmt::format, net::TcpListener};
 
+use actix_web::middleware::Logger;
 use actix_web::{
     dev::Server, get, http::StatusCode, post, web, App, HttpRequest, HttpResponse, HttpServer,
-    Responder, Route,
+    Responder,
 };
 
 use crate::routes::*;
@@ -39,6 +40,7 @@ pub fn run(listener: TcpListener, db_pool: PgPool) -> Result<Server, std::io::Er
     let server = HttpServer::new(move || {
         //builder pattern
         App::new()
+            .wrap(Logger::default())
             .app_data(connection.clone())
             .route("/health_check", web::get().to(check_health))
             .route("/nate", web::get().to(nate))

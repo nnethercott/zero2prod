@@ -29,6 +29,7 @@ async fn configure_database(config: &DatabaseSettings) -> PgPool {
         .await
         .expect("no pool");
 
+    // creates tables
     sqlx::migrate!("./migrations")
         .run(&db_pool)
         .await
@@ -38,11 +39,11 @@ async fn configure_database(config: &DatabaseSettings) -> PgPool {
 }
 
 async fn spawn_server() -> TestApp {
+    // bind random port
     let listener = TcpListener::bind("127.0.0.1:0").expect("address in use");
     let port = listener.local_addr().unwrap().port();
     let mut address = format!("http://127.0.0.1:{}", port);
 
-    // need a pg connection
     let mut settings = get_configuration("configuration.yaml").unwrap();
     settings.database.database_name = Uuid::new_v4().to_string();
 

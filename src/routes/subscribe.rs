@@ -2,6 +2,7 @@ use actix_web::{web, HttpResponse};
 use chrono::Local as Utc;
 use serde::Deserialize;
 use sqlx::{query, PgPool};
+use tracing;
 use uuid::Uuid;
 
 #[derive(Deserialize)]
@@ -14,8 +15,13 @@ pub async fn subscribe<'a>(
     form: web::Form<FormData>,
     connection: web::Data<PgPool>,
 ) -> HttpResponse {
-    let a = connection.get_ref();
-
+    let request_id = Uuid::new_v4();
+    tracing::info!(
+        "request_id {} - Adding new subscriber: '{}' '{}'",
+        request_id,
+        form.name,
+        form.email
+    );
     match query!(
         r"insert into subscriptions values($1, $2, $3, $4)",
         Uuid::new_v4(),
@@ -26,9 +32,15 @@ pub async fn subscribe<'a>(
     .execute(connection.get_ref())
     .await
     {
-        Ok(_) => HttpResponse::Ok().finish(),
+        Ok(_) => {
+            tracing::info!(
+                "request_id {} - successfully registered new user",
+                request_id
+            );
+            HttpResponse::Ok().finish()
+        }
         Err(e) => {
-            println!("failed to insert entry {:?}", e);
+            tracing::error!("request_id {} - failed to insert entry {:?}", request_id, e);
             HttpResponse::InternalServerError().finish()
         }
     }

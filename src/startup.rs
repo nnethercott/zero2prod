@@ -1,12 +1,8 @@
-use serde::Deserialize;
 use sqlx::PgPool;
-use std::{fmt::format, net::TcpListener};
+use std::net::TcpListener;
 
 use actix_web::middleware::Logger;
-use actix_web::{
-    dev::Server, get, http::StatusCode, post, web, App, HttpRequest, HttpResponse, HttpServer,
-    Responder,
-};
+use actix_web::{dev::Server, web, App, HttpRequest, HttpResponse, HttpServer, Responder};
 
 use crate::routes::*;
 
@@ -22,7 +18,7 @@ struct Nate;
 impl Responder for Nate {
     type Body = actix_web::body::BoxBody; //not sure what this does
 
-    fn respond_to(self, req: &HttpRequest) -> HttpResponse<Self::Body> {
+    fn respond_to(self, _req: &HttpRequest) -> HttpResponse<Self::Body> {
         let msg = "nate's custom responder";
         HttpResponse::Ok().body(msg)
     }
@@ -44,6 +40,7 @@ pub fn run(listener: TcpListener, db_pool: PgPool) -> Result<Server, std::io::Er
             .app_data(connection.clone())
             .route("/health_check", web::get().to(check_health))
             .route("/nate", web::get().to(nate))
+            .route("/hello", web::get().to(hello))
             .route("/subscribe", web::post().to(subscribe))
     })
     .listen(listener)?

@@ -47,4 +47,7 @@ done
 >&2 echo "postgres is up and running !"
 DATABASE_URL=postgres://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAM}
 
+# need this for github actions
+export DATABASE_URL
+
 sqlx database create --database-url ${DATABASE_URL}

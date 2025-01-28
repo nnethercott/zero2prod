@@ -4,7 +4,13 @@ use serde::Deserialize;
 #[derive(Deserialize)]
 pub struct Settings {
     pub database: DatabaseSettings,
-    pub application_port: u16,
+    pub app: ApplicationSettings,
+}
+
+#[derive(Deserialize)]
+pub struct ApplicationSettings {
+    pub port: u16,
+    pub host: String,
 }
 
 #[derive(Deserialize)]
@@ -16,9 +22,39 @@ pub struct DatabaseSettings {
     pub database_name: String,
 }
 
+pub enum Environment{Local, Production}
+
+impl Environment{
+    pub fn to_string(&self)->String{
+        match self{
+            Environment::Local => "local".to_string(),
+            Environment::Production => "Production".to_string(),
+
+        }
+    }
+}
+
+impl TryFrom<String> for Environment{
+    type Error = String;
+
+    fn try_from(s: String) -> Result<Self, Self::Error> {
+        match s.to_lowercase().as_str(){
+            "local"=> Ok(Environment::Local),
+            "production"=> Ok(Environment::Production),
+            _=>Err(format!("environment {} not found; use either `local` or `production`", s)),
+        }
+    }
+}
+
 pub fn get_configuration(file: &str) -> Result<Settings, ConfigError> {
+    let base_path = std::env::current_dir().expect("failed to resolve current path");
+    let configuration_dir = base_path.join("configuration");
+    let environ = std::env::var("APP_ENVIRONMENT").unwrap_or("local".to_string());
+    let env_filename = format!("{}.yaml", environ);
+
     let settings = Config::builder()
-        .add_source(File::new(file, FileFormat::Yaml))
+        .add_source(File::from(configuration_dir.join("base.yaml")))
+        .add_source(File::from(configuration_dir.join(env_filename)))
         .build()?;
 
     settings.try_deserialize()

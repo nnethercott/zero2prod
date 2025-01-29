@@ -31,7 +31,7 @@ static TRACING: Lazy<()> = Lazy::new(|| {
 });
 
 async fn configure_database(config: &DatabaseSettings) -> PgPool {
-    let mut connection = PgConnection::connect(&config.connection_string_without_db())
+    let mut connection = PgConnection::connect_with(&config.without_db())
         .await
         .expect("could not connect!");
 
@@ -42,17 +42,17 @@ async fn configure_database(config: &DatabaseSettings) -> PgPool {
         .expect("failed to create database");
 
     // run migrations on database
-    let db_pool = PgPool::connect(&config.connection_string())
+    let connection_pool = PgPool::connect_with(config.with_db())
         .await
         .expect("no pool");
 
     // creates tables
     sqlx::migrate!("./migrations")
-        .run(&db_pool)
+        .run(&connection_pool)
         .await
         .expect("failed to make migrations");
 
-    db_pool
+    connection_pool
 }
 
 async fn spawn_server() -> TestApp {

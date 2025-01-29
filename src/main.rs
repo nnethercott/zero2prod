@@ -17,9 +17,7 @@ async fn main() -> Result<(), std::io::Error> {
 
     let listener = TcpListener::bind(address)?;
 
-    let db_pool = PgPool::connect_lazy(&settings.database.connection_string())
-        .expect("couldn't connect to db");
-
+    let db_pool = PgPool::connect_lazy_with(settings.database.with_db());
 
     zero2prod::run(listener, db_pool)?.await
 }

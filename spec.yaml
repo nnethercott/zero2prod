@@ -1,0 +1,24 @@
+name: zero2prod
+region: fra
+services:
+  - name: app
+    dockerfile_path: Dockerfile
+    source_dir: .
+    github:
+      repo: nnethercott/zero2prod
+      branch: main
+      deploy_on_push: true
+    # run_command: zero2prod
+    # envs:
+    #   - key: SQLX_OFFLINE
+    #     value: true
+    routes:
+      - path: /
+    health_check:
+      http_path: /health_check
+      port: 8000
+    instance_count: 1
+    instance_size_slug: basic-xxs
+
+# databases:
+

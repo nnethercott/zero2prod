@@ -1,3 +1,4 @@
+#!/bin/bash
 set -x # lists all commands run
 set -eo pipefail # something about nonzero exit
 
@@ -7,12 +8,12 @@ set -eo pipefail # something about nonzero exit
 # status is that of the command that failed
 
 # check we have dependencies installed
-if ![-x "$(command -v psql)"]; then
+if ! [ -x "$(command -v psql)" ]; then
     echo >&2 "Error; psql not installed!"
     exit 1
 fi
 
-if ![-x "$(command -v sqlx)"]; then
+if ! [ -x "$(command -v sqlx)" ]; then
     echo >&2 "Error; sqlx not installed!"
     echo >&2 "Use: `cargo install sqlx-cli --no-default-features --features native-tls,postgres`"
     exit 1

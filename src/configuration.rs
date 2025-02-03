@@ -25,12 +25,12 @@ pub struct DatabaseSettings {
     #[serde(deserialize_with = "deserialize_number_from_string")]
     pub port: u16,
     pub database_name: String,
-    pub reqiure_ssl: bool,
+    pub require_ssl: bool,
 }
 
 impl DatabaseSettings {
     pub fn without_db(&self) -> PgConnectOptions {
-        let ssl_mode = if self.reqiure_ssl {
+        let ssl_mode = if self.require_ssl {
             PgSslMode::Require
         } else {
             PgSslMode::Prefer
@@ -80,7 +80,7 @@ impl TryFrom<String> for Environment {
 pub fn get_configuration(file: &str) -> Result<Settings, ConfigError> {
     let base_path = std::env::current_dir().expect("failed to resolve current path");
     let configuration_dir = base_path.join("configuration");
-    let environ: Environment = std::env::var("APP_ENVIRONMENT")
+    let environ: Environment = std::env::var("APP_ENVIRONMENT") // "local" or "production"
         .unwrap_or("local".to_string())
         .try_into()
         .expect("Failed to parse environment");

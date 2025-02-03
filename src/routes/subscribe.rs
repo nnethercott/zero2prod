@@ -1,3 +1,4 @@
+use crate::domain::{NewSubscriber, SubscriberName};
 use actix_web::{web, HttpResponse};
 use chrono::Local as Utc;
 use serde::Deserialize;
@@ -15,43 +16,45 @@ pub struct FormData {
     name = "Adding a new subscriber",
     skip(form, pool),
     fields(
-        request_id = %Uuid::new_v4(),
         subscriber_email = %form.email,
         subscriber_name = %form.name,
     )
 )]
 pub async fn subscribe<'a>(form: web::Form<FormData>, pool: web::Data<PgPool>) -> HttpResponse {
-    let request_id = Uuid::new_v4();
+    let name = match SubscriberName::parse(form.0.name){
+        Ok(name) => name,
+        Err(_) => return HttpResponse::BadRequest().finish(),
+    };
 
-    let request_span = tracing::info_span!(
-        "Adding a new subscriber.",
-        %request_id,
-        subscriber_email = %form.email,
-        subscriber_name = %form.name
-    );
+    let subscriber = NewSubscriber {
+        email: form.0.email,
+        name,
+    };
 
-    match insert_subscriber(&form, pool.get_ref()).await {
-        Ok(_) => {
-            tracing::info_span!(
-                "request_id successfully registered new user",
-                %request_id
-            );
-            HttpResponse::Ok().finish()
-        }
+    match insert_subscriber(&subscriber, pool.get_ref()).await {
+        Ok(_) => HttpResponse::Ok().finish(),
         Err(e) => HttpResponse::InternalServerError().finish(),
     }
 }
 
 #[tracing::instrument(
     name = "Saving new subscriber details in the database",
-    skip(form, pool)
+    skip(sub, pool)
 )]
-pub async fn insert_subscriber(form: &FormData, pool: &PgPool) -> Result<(), sqlx::Error> {
+pub async fn insert_subscriber(sub: &NewSubscriber, pool: &PgPool) -> Result<(), sqlx::Error> {
+    let request_id = Uuid::new_v4();
+    let request_span = tracing::info_span!(
+        "Adding a new subscriber.",
+        %request_id,
+        subscriber_email = %sub.email,
+        subscriber_name = %sub.name.as_ref(),
+    );
+
     query!(
         r"insert into subscriptions values($1, $2, $3, $4)",
         Uuid::new_v4(),
-        form.email,
-        form.name,
+        &sub.email,
+        sub.name.as_ref(),
         Utc::now(),
     )
     .execute(pool)

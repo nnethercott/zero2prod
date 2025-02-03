@@ -35,18 +35,17 @@ async fn configure_database(config: &DatabaseSettings) -> PgPool {
         .await
         .expect("could not connect!");
 
+    // setup test db
     let query = format!(r#"create database "{}";"#, config.database_name.as_str());
     connection
         .execute(query.as_str())
         .await
         .expect("failed to create database");
 
-    // run migrations on database
+    // run migrations on test database
     let connection_pool = PgPool::connect_with(config.with_db())
         .await
         .expect("no pool");
-
-    // creates tables
     sqlx::migrate!("./migrations")
         .run(&connection_pool)
         .await
@@ -62,9 +61,9 @@ async fn spawn_server() -> TestApp {
     // bind random port
     let listener = TcpListener::bind("127.0.0.1:0").expect("address in use");
     let port = listener.local_addr().unwrap().port();
-    let mut address = format!("http://127.0.0.1:{}", port);
 
-    let mut settings = get_configuration("configuration.yaml").unwrap();
+    let mut settings = get_configuration("local.yaml").unwrap();
+    let mut address = format!("http://{}:{}", settings.database.host, port);
     settings.database.database_name = Uuid::new_v4().to_string();
 
     let db_pool = configure_database(&settings.database).await;
@@ -132,6 +131,30 @@ async fn test_subscribe_returns_400_for_invalid_data() {
         ("email=ursula-le-guin%40gmail.com", "missing the name"),
         ("name=le%20guin", "missing the email"),
         ("", "missing both name and email"),
+    ];
+
+    for (invalid_body, error_message) in test_cases {
+        let response = client
+            .post(format!("{}/subscribe", test_app.address))
+            .header("Content-Type", "application/x-www-form-urlencoded")
+            .body(invalid_body)
+            .send()
+            .await
+            .expect("failed to execute request");
+
+        assert_eq!(response.status().as_u16(), 400, "{}", error_message);
+    }
+}
+
+#[tokio::test]
+async fn test_subscribe_fail_with_bad_params() {
+    let test_app = spawn_server().await;
+    let client = Client::new();
+
+    let test_cases = vec![
+        ("name=&email=ursula-le-guin%40gmail.com", "missing the name"),
+        ("name=le%20guin&email=", "missing the email"),
+        ("name=nate&email=super-bad-email", "poorly formatted email"),
     ];
 
     for (invalid_body, error_message) in test_cases {

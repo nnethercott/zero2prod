@@ -12,7 +12,7 @@ pub struct SubscriberName(String);
 // }
 
 impl SubscriberName{
-    pub fn parse(s: String)->Result<Self, String>{
+    pub fn parse(s: String) -> Result<Self, String> {
         let is_empty = s.trim().is_empty();
         let is_too_long = s.graphemes(true).count() > 256;
 

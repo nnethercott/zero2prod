@@ -1,3 +1,4 @@
+use serde::Deserialize;
 use validator::ValidateEmail;
 use std::borrow::Cow;
 
@@ -11,7 +12,7 @@ impl ValidateEmail for SubscriberEmail{
 }
 
 impl SubscriberEmail{
-    fn parse(s: String)->Result<Self, String>{
+    pub fn parse(s: String) -> Result<Self, String> {
         let email = SubscriberEmail(s);
         if email.validate_email(){
             return Ok(email);
@@ -21,6 +22,7 @@ impl SubscriberEmail{
         }
     }
 }
+
 
 impl AsRef<str> for SubscriberEmail{
     fn as_ref(&self) -> &str {

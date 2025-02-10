@@ -4,9 +4,7 @@ use sqlx::{Connection, Executor, PgConnection, PgPool};
 use std::net::TcpListener;
 use uuid::Uuid;
 use zero2prod::{
-    configuration::{get_configuration, DatabaseSettings},
-    run,
-    telemetry::{get_subscriber, init_subscriber},
+    configuration::{get_configuration, DatabaseSettings}, email_client::{self, EmailClient}, run, telemetry::{get_subscriber, init_subscriber}
 };
 
 use once_cell::sync::Lazy;
@@ -67,7 +65,14 @@ async fn spawn_server() -> TestApp {
     settings.database.database_name = Uuid::new_v4().to_string();
 
     let db_pool = configure_database(&settings.database).await;
-    let server = run(listener, db_pool.clone()).expect("failed to bind address");
+
+    let sender_email = settings.email_client.sender().expect("invalid email");
+    let email_client = EmailClient::new(
+        settings.email_client.base_url,
+        sender_email,
+    );
+
+    let server = run(listener, db_pool.clone(), email_client).expect("failed to bind address");
     //spawn server
     let _ = tokio::spawn(server);
 

@@ -70,6 +70,7 @@ async fn spawn_server() -> TestApp {
     let email_client = EmailClient::new(
         settings.email_client.base_url,
         sender_email,
+        settings.email_client.auth_token,
     );
 
     let server = run(listener, db_pool.clone(), email_client).expect("failed to bind address");

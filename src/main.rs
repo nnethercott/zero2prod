@@ -25,6 +25,7 @@ async fn main() -> Result<(), std::io::Error> {
     let email_client = EmailClient::new(
         settings.email_client.base_url,
         sender_email,
+        settings.email_client.auth_token,
     );
 
     zero2prod::run(listener, db_pool, email_client)?.await

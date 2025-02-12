@@ -9,3 +9,4 @@ database:
 email_client:
   sender_email: "nate@gmail.com"
   base_url: "foo.bar@google.com"
+  auth_token: "my-secret-token"

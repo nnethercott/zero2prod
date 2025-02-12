@@ -21,7 +21,7 @@ impl SubscriberName{
         ];
         let contains_bad_chars = s.chars().any(|c| bad_chars.contains(&c));
 
-        if (is_empty || is_too_long || contains_bad_chars){
+        if is_empty || is_too_long || contains_bad_chars{
             return Err("invalid subscriber name !".to_string());
         }
         Ok(Self(s))

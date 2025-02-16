@@ -71,7 +71,7 @@ pub fn run(
         App::new()
             .wrap(Logger::default())
             .app_data(connection.clone())
-            .app_data(email_client.clone())
+            .app_data(email_client.clone()) // wanna reuse same email client ?
             .route("/health_check", web::get().to(check_health))
             .route("/nate", web::get().to(nate))
             .route("/subscribe", web::post().to(subscribe))

@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::domain::SubscriberEmail;
 
+#[derive(Debug)]
 pub struct EmailClient {
     sender: SubscriberEmail,
     http_client: Client,

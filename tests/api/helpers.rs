@@ -8,7 +8,7 @@ use wiremock::MockServer;
 use zero2prod::{
     configuration::{get_configuration, DatabaseSettings},
     email_client::{self, EmailClient},
-    get_connection_pool, run,
+    get_connection_pool,
     telemetry::{get_subscriber, init_subscriber},
     Application,
 };
@@ -19,6 +19,7 @@ pub struct TestApp {
     pub db_pool: PgPool,
     pub address: String,
     pub email_server: MockServer,
+    pub port: u16,
 }
 
 impl TestApp {
@@ -90,6 +91,8 @@ pub async fn spawn_app() -> TestApp {
     let application = Application::build(configuration.clone())
         .await
         .expect("Failed to build application.");
+
+    let port = application.port();
     let address = format!("http://localhost:{}", application.port());
     let _ = tokio::spawn(application.run_until_stopped());
 
@@ -99,5 +102,6 @@ pub async fn spawn_app() -> TestApp {
         address,
         db_pool,
         email_server,
+        port,
     }
 }

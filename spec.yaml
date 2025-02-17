@@ -10,6 +10,9 @@ services:
       deploy_on_push: true
     envs:
       # references datase resource we defined here
+      - key: APP__APP_BASE_URL
+        value: ${APP_URL}
+        scope: RUN_TIME
       - key: APP_DATABASE__USERNAME
         value: ${newsletter.USERNAME}
         scope: RUN_TIME

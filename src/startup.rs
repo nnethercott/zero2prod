@@ -38,7 +38,7 @@ impl Application {
         let listener = TcpListener::bind(address)?;
 
         let port = listener.local_addr().unwrap().port();
-        let server = run(listener, db_pool, email_client)?;
+        let server = run(listener, db_pool, email_client, app_settings.base_url)?;
 
         Ok(Self {
             port,
@@ -55,16 +55,20 @@ impl Application {
     }
 }
 
+pub struct ApplicationBaseUrl(pub String);
+
 pub fn run(
     listener: TcpListener,
     db_pool: PgPool,
     email_client: EmailClient,
+    base_url: String, // set in env
 ) -> Result<Server, std::io::Error> {
     println!("{:?}", listener.local_addr());
 
     // an Arc<PgPool> we need to be Clone
     let connection = web::Data::new(db_pool);
     let email_client = web::Data::new(email_client);
+    let base_url = web::Data::new(ApplicationBaseUrl(base_url));
 
     let server = HttpServer::new(move || {
         //builder pattern
@@ -72,9 +76,11 @@ pub fn run(
             .wrap(Logger::default())
             .app_data(connection.clone())
             .app_data(email_client.clone()) // wanna reuse same email client ?
+            .app_data(base_url.clone()) // wanna reuse same email client ?
             .route("/health_check", web::get().to(check_health))
             .route("/nate", web::get().to(nate))
             .route("/subscribe", web::post().to(subscribe))
+            .route("/subscribe/confirm", web::get().to(subscribe_confirm))
     })
     .listen(listener)?
     .run();

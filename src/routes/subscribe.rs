@@ -1,4 +1,7 @@
-use crate::{domain::{NewSubscriber, SubscriberEmail, SubscriberName}, email_client::{self, EmailClient}};
+use crate::{
+    domain::{NewSubscriber, SubscriberEmail, SubscriberName},
+    email_client::{self, EmailClient}, ApplicationBaseUrl,
+};
 use actix_web::{web, HttpResponse};
 use chrono::Local as Utc;
 use serde::Deserialize;
@@ -24,7 +27,7 @@ impl TryFrom<FormData> for NewSubscriber {
 
 #[tracing::instrument(
     name = "Adding a new subscriber",
-    skip(form, pool),
+    skip(form, pool, email_client, base_url),
     fields(
         subscriber_email = %form.email,
         subscriber_name = %form.name,
@@ -34,26 +37,56 @@ pub async fn subscribe<'a>(
     form: web::Form<FormData>,
     pool: web::Data<PgPool>,
     email_client: web::Data<EmailClient>,
+    base_url: web::Data<ApplicationBaseUrl>,
 ) -> HttpResponse {
-    let subscriber = match form.0.try_into(){
+    let subscriber = match form.0.try_into() {
         Ok(sub) => sub,
         Err(_) => return HttpResponse::BadRequest().finish(),
     };
 
     // perform db insert
-    if insert_subscriber(&subscriber, pool.get_ref()).await.is_err() {
+    if insert_subscriber(&subscriber, pool.get_ref())
+        .await
+        .is_err()
+    {
         return HttpResponse::InternalServerError().finish();
     }
-    if email_client.send_email(
-        subscriber.email,
-        "welcome!",
-        "welcome to the newsletter!",
-        "welcome to the newsletter!",
-    ).await.is_err(){
+
+    if send_confirmation_email(&email_client, subscriber, &base_url.0)
+        .await
+        .is_err()
+    {
         return HttpResponse::InternalServerError().finish();
     }
 
     HttpResponse::Ok().finish()
+}
+
+#[tracing::instrument(
+    name = "send confirmation email to new subscriber",
+    skip(email_client, sub)
+)]
+pub async fn send_confirmation_email(
+    email_client: &EmailClient,
+    sub: NewSubscriber,
+    domain: &str,
+) -> Result<(), String> {
+    let confirmation_link = format!("{}/subscribe/confirm?token=nate", domain);
+    let plain_body = format!(
+        "welcome to the newsletter!\nClick {} to confirm",
+        confirmation_link
+    );
+    let html_body = format!(
+        "welcome to the newsletter!<br />\
+            Click <a href=\"{}\"here</a> to confirm",
+        confirmation_link
+    );
+
+    email_client
+        .send_email(sub.email, "welcome!", &html_body, &plain_body)
+        .await;
+
+    Ok(())
 }
 
 #[tracing::instrument(
@@ -70,7 +103,7 @@ pub async fn insert_subscriber(sub: &NewSubscriber, pool: &PgPool) -> Result<(),
     );
 
     query!(
-        r"insert into subscriptions values($1, $2, $3, $4, 'confirmed')",
+        r"insert into subscriptions values($1, $2, $3, $4, 'pending_confirmation')",
         Uuid::new_v4(),
         &sub.email.as_ref(),
         sub.name.as_ref(),

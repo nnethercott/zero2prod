@@ -80,7 +80,7 @@ pub fn run(
             .route("/health_check", web::get().to(check_health))
             .route("/nate", web::get().to(nate))
             .route("/subscribe", web::post().to(subscribe))
-            .route("/subscribe/confirm", web::get().to(subscribe_confirm))
+            .route("/subscribe/confirm", web::get().to(confirm))
     })
     .listen(listener)?
     .run();

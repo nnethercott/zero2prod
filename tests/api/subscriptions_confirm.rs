@@ -23,22 +23,8 @@ async fn link_returned_by_subscribe_returns_200_if_called() {
     let _ = app.post_subscriptions(body).await;
     let email_request = &app.email_server.received_requests().await.unwrap()[0];
 
-    let body: serde_json::Value = serde_json::from_slice(&email_request.body).unwrap();
-
-    let get_link = |s: &str| {
-        let links: Vec<_> = LinkFinder::new()
-            .links(s)
-            .filter(|l| *l.kind() == LinkKind::Url)
-            .collect();
-        assert_eq!(links.len(), 1);
-        links[0].as_str().to_owned()
-    };
-
-    let link = get_link(&body["HtmlBody"].as_str().unwrap());
-    let mut confirmation_link = Url::parse(&link).unwrap();
-
-    // overwrite port with app value!
-    confirmation_link.set_port(Some(app.port));
+    let links = app.get_confirmation_links(&email_request).await;
+    let mut confirmation_link = links.text;
 
     assert_eq!(confirmation_link.host_str().unwrap(), "127.0.0.1");
 
@@ -48,4 +34,32 @@ async fn link_returned_by_subscribe_returns_200_if_called() {
         .expect("failed to send");
 
     assert_eq!(response.status().as_u16(), 200);
+}
+
+#[tokio::test]
+async fn clicking_link_confirms_new_user() {
+    // Arrange
+    let app = spawn_app().await;
+    let body = "name=le%20guin&email=ursula_le_guin%40gmail.com";
+
+    // Act
+    app.post_subscriptions(body).await;
+    let email_request = &app.email_server.received_requests().await.unwrap()[0];
+
+    let links = app.get_confirmation_links(email_request).await;
+
+    reqwest::get(links.text)
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+
+    let saved = sqlx::query!("SELECT email, name, status FROM subscriptions",)
+        .fetch_one(&app.db_pool)
+        .await
+        .expect("failed to retrieve from db");
+
+    assert_eq!(saved.name, "le guin");
+    assert_eq!(saved.email, "ursula_le_guin@gmail.com");
+    assert_eq!(saved.status, "confirmed");
 }

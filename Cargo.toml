@@ -17,6 +17,7 @@ claims = "0.8.0"
 config = "0.15.5"
 linkify = "0.10.0"
 log = "0.4.25"
+rand = { version = "0.8", features = ["std_rng"] }
 secrecy = { version = "0.8", features = ["serde"] }
 serde = {version = "1", features = ["derive"]}
 serde-aux = "4"

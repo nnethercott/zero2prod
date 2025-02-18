@@ -1,5 +1,6 @@
 use actix_web::http::StatusCode;
-use reqwest::{get, Client, Response};
+use linkify::{LinkFinder, LinkKind};
+use reqwest::{get, Client, Response, Url};
 use secrecy::Secret;
 use sqlx::{postgres::PgPoolOptions, Connection, Executor, PgConnection, PgPool};
 use std::{net::TcpListener, sync::LazyLock};
@@ -14,6 +15,11 @@ use zero2prod::{
 };
 
 use once_cell::sync::Lazy;
+
+pub struct ConfirmationLinks {
+    pub html: reqwest::Url,
+    pub text: reqwest::Url,
+}
 
 pub struct TestApp {
     pub db_pool: PgPool,
@@ -31,6 +37,34 @@ impl TestApp {
             .send()
             .await
             .expect("Failed to execute request.")
+    }
+
+    pub async fn get_confirmation_links(
+        &self,
+        email_request: &wiremock::Request,
+    ) -> ConfirmationLinks {
+
+        let body: serde_json::Value = serde_json::from_slice(&email_request.body).unwrap();
+
+        let get_link = |s: &str| {
+            let links: Vec<_> = LinkFinder::new()
+                .links(s)
+                .filter(|l| *l.kind() == LinkKind::Url)
+                .collect();
+            assert_eq!(links.len(), 1);
+
+            let raw_link = links[0].as_str();
+            let mut link = Url::parse(raw_link).expect("failed to parse url");
+
+            // overwrite port with app value!
+            link.set_port(Some(self.port));
+            link
+        };
+
+        let html = get_link(&body["HtmlBody"].as_str().unwrap());
+        let text = get_link(&body["TextBody"].as_str().unwrap());
+
+        ConfirmationLinks{html, text}
     }
 }
 

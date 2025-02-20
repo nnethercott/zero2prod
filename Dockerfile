@@ -1,5 +1,5 @@
 # cargo chef cached build stuff
-FROM lukemathwalker/cargo-chef:latest as chef
+FROM lukemathwalker/cargo-chef:latest-rust-1.80.1 as chef
 WORKDIR /app
 RUN apt update && apt install lld clang -y
 
@@ -13,11 +13,10 @@ COPY --from=planner /app/recipe.json recipe.json
 # Build our project dependencies, not our application!
 RUN cargo chef cook --release --recipe-path recipe.json
 COPY . .
-ENV SQLX_OFFLINE true
+# ENV SQLX_OFFLINE true
 # Build our project
 RUN cargo build --release --bin zero2prod
 
-# runtime
 FROM debian:bookworm-slim AS runtime
 WORKDIR /app
 RUN apt-get update -y \

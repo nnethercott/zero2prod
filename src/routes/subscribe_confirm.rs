@@ -25,7 +25,8 @@ pub async fn confirm(parameters: Query<Parameters>, pool: web::Data<PgPool>) -> 
             }
             HttpResponse::Ok().finish()
         }
-        None => HttpResponse::Unauthorized().finish()
+        // user wasn't created from subscribe POST endpoint...
+        None => HttpResponse::Unauthorized().finish(),
     }
 }
 

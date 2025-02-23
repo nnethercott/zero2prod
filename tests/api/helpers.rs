@@ -10,6 +10,7 @@ use zero2prod::{
     configuration::{get_configuration, DatabaseSettings},
     email_client::{self, EmailClient},
     get_connection_pool,
+    routes::BodyData,
     telemetry::{get_subscriber, init_subscriber},
     Application,
 };
@@ -39,11 +40,17 @@ impl TestApp {
             .expect("Failed to execute request.")
     }
 
-    pub async fn get_confirmation_links(
-        &self,
-        email_request: &wiremock::Request,
-    ) -> ConfirmationLinks {
+    pub async fn post_newsletters(&self, body: &BodyData) -> reqwest::Response {
+        reqwest::Client::new()
+            .post(&format!("{}/newsletters", &self.address))
+            .header("Content-Type", "application/json")
+            .json(body)
+            .send()
+            .await
+            .expect("failed to post to /newsletters");
+    }
 
+    pub fn get_confirmation_links(&self, email_request: &wiremock::Request) -> ConfirmationLinks {
         let body: serde_json::Value = serde_json::from_slice(&email_request.body).unwrap();
 
         let get_link = |s: &str| {
@@ -64,7 +71,7 @@ impl TestApp {
         let html = get_link(&body["HtmlBody"].as_str().unwrap());
         let text = get_link(&body["TextBody"].as_str().unwrap());
 
-        ConfirmationLinks{html, text}
+        ConfirmationLinks { html, text }
     }
 }
 
@@ -110,6 +117,7 @@ async fn configure_database(config: &DatabaseSettings) -> PgPool {
 pub async fn spawn_app() -> TestApp {
     LazyLock::force(&TRACING);
 
+    // use this to mock the postmark service
     let email_server = MockServer::start().await;
 
     let configuration = {

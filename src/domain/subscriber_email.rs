@@ -1,4 +1,3 @@
-use serde::Deserialize;
 use validator::ValidateEmail;
 use std::borrow::Cow;
 

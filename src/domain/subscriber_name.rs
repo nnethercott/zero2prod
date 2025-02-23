@@ -1,5 +1,4 @@
 use unicode_segmentation::UnicodeSegmentation;
-use std::fmt::Display;
 
 #[derive(Debug)]
 pub struct SubscriberName(String);

@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use reqwest::{Client, ClientBuilder};
 use secrecy::{ExposeSecret, Secret};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 use crate::domain::SubscriberEmail;
 
@@ -12,7 +12,6 @@ pub struct EmailClient {
     http_client: Client,
     base_url: String,
     auth_token: Secret<String>,
-    timeout: Duration,
 }
 
 #[derive(Serialize)]
@@ -37,7 +36,6 @@ impl EmailClient {
             base_url,
             http_client,
             auth_token,
-            timeout,
         }
     }
 

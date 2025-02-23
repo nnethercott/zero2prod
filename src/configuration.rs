@@ -1,4 +1,4 @@
-use config::{Config, ConfigError, File, FileFormat};
+use config::{Config, ConfigError, File};
 use secrecy::{ExposeSecret, Secret};
 use serde::Deserialize;
 use serde_aux::field_attributes::deserialize_number_from_string;

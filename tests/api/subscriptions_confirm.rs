@@ -23,7 +23,7 @@ async fn link_returned_by_subscribe_returns_200_if_called() {
     let _ = app.post_subscriptions(body).await;
     let email_request = &app.email_server.received_requests().await.unwrap()[0];
 
-    let links = app.get_confirmation_links(&email_request).await;
+    let links = app.get_confirmation_links(&email_request);
     let mut confirmation_link = links.text;
 
     assert_eq!(confirmation_link.host_str().unwrap(), "127.0.0.1");
@@ -46,7 +46,7 @@ async fn clicking_link_confirms_new_user() {
     app.post_subscriptions(body).await;
     let email_request = &app.email_server.received_requests().await.unwrap()[0];
 
-    let links = app.get_confirmation_links(email_request).await;
+    let links = app.get_confirmation_links(email_request);
 
     reqwest::get(links.text)
         .await

@@ -81,6 +81,7 @@ pub fn run(
             .route("/nate", web::get().to(nate))
             .route("/subscribe", web::post().to(subscribe))
             .route("/subscribe/confirm", web::get().to(confirm))
+            .route("/newsletters", web::post().to(publish_newsletter))
     })
     .listen(listener)?
     .run();

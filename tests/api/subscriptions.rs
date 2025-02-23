@@ -57,7 +57,7 @@ async fn subscribe_sends_confirmation_email_with_a_link() {
     let _ = app.post_subscriptions(body).await;
     let email_request = &app.email_server.received_requests().await.unwrap()[0];
 
-    let links = app.get_confirmation_links(&email_request).await;
+    let links = app.get_confirmation_links(&email_request);
 
     assert_eq!(links.html, links.text);
 }
@@ -93,3 +93,21 @@ async fn test_subscribe_fail_with_bad_params() {
         assert_eq!(response.status().as_u16(), 400, "{}", error_message);
     }
 }
+
+#[tokio::test]
+async fn drop_token_column_throws_storetokenerror() {
+    let app = spawn_app().await;
+
+    sqlx::query!("alter table subscription_tokens drop column subscription_token;",)
+        .execute(&app.db_pool)
+        .await
+        .expect("failed to poison db");
+
+    // send request
+    let body = "name=le%20guin&email=ursula_le_guin%40gmail.com";
+    let response = app.post_subscriptions(body).await;
+
+    // assert failure
+    assert_eq!(response.status().as_u16(), 500);
+}
+

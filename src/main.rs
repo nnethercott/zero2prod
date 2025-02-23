@@ -1,7 +1,5 @@
-use sqlx::PgPool;
-use std::net::TcpListener;
 use zero2prod::{
-    self, Application, configuration::get_configuration, domain::SubscriberEmail, email_client::EmailClient, telemetry::{get_subscriber, init_subscriber}
+    self, Application, configuration::get_configuration, telemetry::{get_subscriber, init_subscriber}
 };
 
 #[tokio::main]

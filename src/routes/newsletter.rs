@@ -1,8 +1,8 @@
-use crate::email_client::EmailClient;
+use crate::{domain::SubscriberEmail, email_client::EmailClient};
 use actix_web::{web, HttpResponse, ResponseError};
 use anyhow::Context;
 use serde::Deserialize;
-use sqlx::{query_as, PgPool};
+use sqlx::{query, PgPool};
 
 // type-driven design !
 #[derive(Deserialize)]
@@ -17,7 +17,7 @@ pub struct Content {
 }
 
 pub struct ConfirmedSubscriber {
-    email: String,
+    email: SubscriberEmail,
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -28,40 +28,51 @@ pub enum PublishError {
 
 impl ResponseError for PublishError {}
 
+#[tracing::instrument(name = "publish newsletter", skip(pool, body, email_client))]
 pub async fn publish_newsletter<'a>(
     pool: web::Data<PgPool>,
-    _body: web::Json<BodyData>,
+    body: web::Json<BodyData>,
     email_client: web::Data<EmailClient>,
 ) -> Result<HttpResponse, PublishError> {
     let subscribers = get_confirmed_subscribers(pool.as_ref())
         .await
         .context("failed to retrieve confirmed subs")?;
 
-    send_email_to_subs(email_client.as_ref(), _body.into_inner(), subscribers)
-        .await
-        .context("failed to send email to subscribers")?;
+    for subscriber in subscribers {
+        match subscriber {
+            Ok(sub) => email_client
+                .send_email(
+                    &sub.email,
+                    &body.title,
+                    &body.content.text,
+                    &body.content.html,
+                )
+                .await
+                .with_context(|| format!("failed to send email to {:?}", sub.email))?,
+            Err(_) => {
+                tracing::warn!("invalid email retrieved from db");
+            }
+        }
+    }
 
     Ok(HttpResponse::Ok().finish())
 }
 
-async fn send_email_to_subs(
-    email_client: &EmailClient,
-    body: BodyData,
-    emails: Vec<ConfirmedSubscriber>,
-) -> Result<(), anyhow::Error> {
-    for email in emails {
-        //post to postmark ...
-    }
-    Ok(())
-}
-
-async fn get_confirmed_subscribers(pool: &PgPool) -> Result<Vec<ConfirmedSubscriber>, sqlx::Error> {
-    let rows = query_as!(
-        ConfirmedSubscriber,
+#[tracing::instrument(name = "get all subscribers with `confirmed` status", skip(pool))]
+async fn get_confirmed_subscribers(
+    pool: &PgPool,
+) -> Result<Vec<Result<ConfirmedSubscriber, anyhow::Error>>, anyhow::Error> {
+    let rows = query!(
         "select email from subscriptions where status='confirmed'"
     )
     .fetch_all(pool)
-    .await?;
+    .await?
+    .into_iter()
+    .map(|row| match SubscriberEmail::parse(row.email) {
+        Ok(sub) => Ok(ConfirmedSubscriber { email: sub }),
+        Err(error) => Err(anyhow::anyhow!(error)),
+    })
+    .collect();
 
     Ok(rows)
 }

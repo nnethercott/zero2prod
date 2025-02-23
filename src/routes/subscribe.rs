@@ -145,7 +145,7 @@ pub async fn send_confirmation_email(
     );
 
     email_client
-        .send_email(sub.email, "welcome!", &html_body, &plain_body)
+        .send_email(&sub.email, "welcome!", &html_body, &plain_body)
         .await?;
 
     Ok(())

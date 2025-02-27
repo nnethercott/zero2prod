@@ -1,7 +1,7 @@
 use quickcheck::Testable;
 use serde_json::json;
 use wiremock::{
-    matchers::{method, path},
+    matchers::{any, method, path},
     Mock, MockServer, ResponseTemplate,
 };
 
@@ -36,38 +36,30 @@ async fn fails_without_body_in_post() {
     }
 }
 
-#[ignore]
 #[tokio::test]
-async fn emails_are_not_sent_to_unconfirmed_subs() {
+async fn newsletters_are_not_delivered_to_unconfirmed_subscribers() {
     // Arrange
     let app = spawn_app().await;
     create_unconfirmed_user(&app).await;
 
-    // postmark endpoint called to schedule newsletter send
-    let _mock_guard = Mock::given(path("/email"))
-        .and(method("POST"))
+    Mock::given(any())
         .respond_with(ResponseTemplate::new(200))
-        .expect(1)
+        .expect(0)
         .mount(&app.email_server)
         .await;
 
-    let body = json!({
-        "title": "Some super cool title",
+    // Act
+    let newsletter_request_body = serde_json::json!({
+        "title": "Newsletter title",
         "content": {
-            "text": "newsletter body",
-            "html": "<p>newsletter body as html</p>"
+            "text": "Newsletter body as plain text",
+            "html": "<p>Newsletter body as HTML</p>",
         }
     });
+    let response = app.post_newsletters(&newsletter_request_body).await;
 
-    // act
-    let response = app.post_newsletters(&body).await;
+    // Assert
     assert_eq!(response.status().as_u16(), 200);
-}
-
-#[ignore]
-#[tokio::test]
-async fn all_subscribed_users_receive_email() {
-    todo!();
 }
 
 async fn create_unconfirmed_user(app: &TestApp) -> ConfirmationLinks {
@@ -105,4 +97,30 @@ async fn create_confirmed_user(app: &TestApp) {
         .unwrap()
         .error_for_status()
         .unwrap();
+}
+
+#[tokio::test]
+async fn requests_missing_authentication_are_rejected(){
+    // mock post to publish with no header
+    // inspect response to make sure we get a 401 Unauthorized
+    let app = spawn_app().await;
+
+    let body = json!({
+        "title": "not allowed",
+        "content": {
+            "text": "some text",
+            "html": "some text",
+    }
+    });
+
+    let response = reqwest::Client::new()
+            .post(&format!("{}/newsletters", &app.address))
+            .json(&body)
+            .send()
+            .await
+            .expect("failed to post to /newsletters")
+;
+    assert_eq!(response.status().as_u16(), 401);
+
+    assert_eq!(r#"Basic realm="publish""#, response.headers()["WWW-Authenticate"]);
 }

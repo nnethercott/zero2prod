@@ -40,14 +40,14 @@ impl TestApp {
             .expect("Failed to execute request.")
     }
 
-    pub async fn post_newsletters(&self, body: &BodyData) -> reqwest::Response {
+    pub async fn post_newsletters(&self, body: &serde_json::Value) -> reqwest::Response {
         reqwest::Client::new()
             .post(&format!("{}/newsletters", &self.address))
-            .header("Content-Type", "application/json")
-            .json(body)
+            .basic_auth("nate", Some("nethercott"))
+            .json(&body)
             .send()
             .await
-            .expect("failed to post to /newsletters");
+            .expect("Failed to execute request.")
     }
 
     pub fn get_confirmation_links(&self, email_request: &wiremock::Request) -> ConfirmationLinks {

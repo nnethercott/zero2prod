@@ -1,21 +1,19 @@
-use std::fmt::Debug;
 use actix_web::{http::StatusCode, web, HttpResponse, ResponseError};
+use anyhow::Context;
+use chrono::Local as Utc;
 use rand::{distributions::Alphanumeric, Rng};
 use serde::Deserialize;
 use sqlx::{query, Executor, PgPool, Postgres, Row, Transaction};
+use std::fmt::Debug;
+use thiserror;
 use tracing;
 use uuid::Uuid;
-use chrono::Local as Utc;
-use thiserror;
-use anyhow::Context;
-
 
 use crate::{
     domain::{NewSubscriber, SubscriberEmail, SubscriberName},
     email_client::EmailClient,
     ApplicationBaseUrl,
 };
-
 
 #[derive(Deserialize)]
 pub struct FormData {
@@ -33,13 +31,12 @@ impl TryFrom<FormData> for NewSubscriber {
     }
 }
 
-
 #[derive(thiserror::Error)]
 pub enum SubscribeError {
     #[error("{0}")]
     ValidationError(String),
     #[error(transparent)]
-    Other(#[from] anyhow::Error)
+    Other(#[from] anyhow::Error),
 }
 
 impl ResponseError for SubscribeError {
@@ -89,7 +86,10 @@ pub async fn subscribe<'a>(
     let subscriber = form.0.try_into().map_err(SubscribeError::ValidationError)?;
 
     // NOTE:make subscribe and tokens table update atomic
-    let mut transaction = pool.begin().await.context("failed to establish connection to postgres")?;
+    let mut transaction = pool
+        .begin()
+        .await
+        .context("failed to establish connection to postgres")?;
 
     // perform db insert
     let uid = insert_subscriber(&subscriber, &mut transaction)
@@ -100,7 +100,6 @@ pub async fn subscribe<'a>(
     store_token(&token, uid, &mut transaction)
         .await
         .context("failed to persist subscription token")?;
-
 
     // make sure to commit transaction !
     transaction
@@ -169,7 +168,7 @@ pub async fn insert_subscriber(
 
     let uid = Uuid::new_v4();
 
-    // check if sub exists already - return uid if so
+    // check if sub exists already -- return uid if so
     let row = transaction
         .fetch_optional(query!(
             r"select id from subscriptions where name = $1",

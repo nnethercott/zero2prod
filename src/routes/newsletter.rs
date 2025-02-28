@@ -4,13 +4,14 @@ use actix_web::{
         header::{self, HeaderMap, HeaderValue},
         StatusCode,
     },
-    web::{self, get},
+    web::{self},
     HttpRequest, HttpResponse, ResponseError,
 };
 use anyhow::Context;
 use base64::Engine;
-use secrecy::Secret;
+use secrecy::{ExposeSecret, Secret};
 use serde::Deserialize;
+use sha3::Digest;
 use sqlx::{query, PgPool};
 
 /// type-driven design !
@@ -68,8 +69,9 @@ pub async fn publish_newsletter<'a>(
     email_client: web::Data<EmailClient>,
     request: HttpRequest,
 ) -> Result<HttpResponse, PublishError> {
-    let _credentials =
+    let credentials =
         basic_authentication(&request.headers()).map_err(|e| PublishError::AuthErr(e))?;
+    let user_id = validate_credentials(&credentials, &pool).await?;
 
     let subscribers = get_confirmed_subscribers(pool.as_ref())
         .await
@@ -119,11 +121,34 @@ struct Credentials {
     password: Secret<String>,
 }
 
+async fn validate_credentials(
+    credentials: &Credentials,
+    db_pool: &PgPool,
+) -> Result<uuid::Uuid, PublishError> {
+    let password_hash = sha3::Sha3_256::digest(credentials.password.expose_secret().as_bytes());
+    let password_hash = format!("{:x}", password_hash);
+
+    let user_id = sqlx::query!(
+        r#"select user_id from users where name=$1 and password_hash=$2"#,
+        &credentials.username,
+        password_hash,
+    )
+    .fetch_optional(db_pool)
+    .await
+    .context("Failed to run query")
+    .map_err(|e| PublishError::UnexpectedError(e))?;
+
+    user_id
+        .map(|row| row.user_id)
+        .ok_or_else(|| anyhow::anyhow!("No user found with provided credentials"))
+        .map_err(PublishError::AuthErr)
+}
+
 fn basic_authentication(headers: &HeaderMap) -> Result<Credentials, anyhow::Error> {
     // The header value, if present, must be a valid UTF8 string
     let header_value = headers
         .get("Authorization")
-        .context("The 'Authorization' header was missing")?
+        .context("The Authorization' header was missing")?
         .to_str()
         .context("The 'Authorization' header was not a valid UTF8 string.")?;
     let base64encoded_credentials = header_value
@@ -135,6 +160,7 @@ fn basic_authentication(headers: &HeaderMap) -> Result<Credentials, anyhow::Erro
     let decoded_credentials = String::from_utf8(decoded_credentials)
         .context("The decoded credential string is valid UTF8.")?;
 
+    // splitn returns at most 2 elements !
     let mut credentials = decoded_credentials.splitn(2, ':');
     let username = credentials
         .next()

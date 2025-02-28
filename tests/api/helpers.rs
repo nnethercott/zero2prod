@@ -2,8 +2,10 @@ use actix_web::http::StatusCode;
 use linkify::{LinkFinder, LinkKind};
 use reqwest::{get, Client, Response, Url};
 use secrecy::Secret;
+use sha3::{Digest, Sha3_256};
 use sqlx::{postgres::PgPoolOptions, Connection, Executor, PgConnection, PgPool};
 use std::{net::TcpListener, sync::LazyLock};
+use tracing_subscriber::fmt::format;
 use uuid::Uuid;
 use wiremock::MockServer;
 use zero2prod::{
@@ -22,11 +24,40 @@ pub struct ConfirmationLinks {
     pub text: reqwest::Url,
 }
 
+pub struct TestUser {
+    user_id: Uuid,
+    username: String,
+    password: String,
+}
+impl TestUser {
+    pub fn generate() -> Self {
+        Self {
+            user_id: Uuid::new_v4(),
+            username: Uuid::new_v4().to_string(),
+            password: Uuid::new_v4().to_string(),
+        }
+    }
+    pub async fn store(&self, pool: &PgPool) {
+        let password_hash = Sha3_256::digest(&self.password.as_bytes());
+
+        sqlx::query!(
+            r#"insert into users values($1, $2, $3)"#,
+            &self.user_id,
+            &self.username,
+            format!("{:x}", password_hash),
+        )
+        .execute(pool)
+        .await
+        .expect("failed to add user");
+    }
+}
+
 pub struct TestApp {
     pub db_pool: PgPool,
     pub address: String,
     pub email_server: MockServer,
     pub port: u16,
+    pub user: TestUser,
 }
 
 impl TestApp {
@@ -43,7 +74,8 @@ impl TestApp {
     pub async fn post_newsletters(&self, body: &serde_json::Value) -> reqwest::Response {
         reqwest::Client::new()
             .post(&format!("{}/newsletters", &self.address))
-            .basic_auth("nate", Some("nethercott"))
+            .basic_auth(&self.user.username, Some(&self.user.password))
+            // equivalent to: .header("Authorization", "Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==")
             .json(&body)
             .send()
             .await
@@ -140,10 +172,17 @@ pub async fn spawn_app() -> TestApp {
 
     let db_pool = get_connection_pool(&configuration.database);
 
-    TestApp {
+    // add verified user
+    let user = TestUser::generate();
+    user.store(&db_pool).await;
+
+    let test_app = TestApp {
         address,
         db_pool,
         email_server,
         port,
-    }
+        user,
+    };
+
+    test_app
 }

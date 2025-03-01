@@ -8,11 +8,12 @@ use actix_web::{
     HttpRequest, HttpResponse, ResponseError,
 };
 use anyhow::Context;
+use argon2::{Argon2, PasswordHash, PasswordVerifier};
 use base64::Engine;
 use secrecy::{ExposeSecret, Secret};
 use serde::Deserialize;
-use sha3::Digest;
 use sqlx::{query, PgPool};
+use uuid::Uuid;
 
 /// type-driven design !
 /// example body:
@@ -71,7 +72,7 @@ pub async fn publish_newsletter<'a>(
 ) -> Result<HttpResponse, PublishError> {
     let credentials =
         basic_authentication(&request.headers()).map_err(|e| PublishError::AuthErr(e))?;
-    let user_id = validate_credentials(&credentials, &pool).await?;
+    let _user_id = validate_credentials(credentials, &pool).await?;
 
     let subscribers = get_confirmed_subscribers(pool.as_ref())
         .await
@@ -122,25 +123,53 @@ struct Credentials {
 }
 
 async fn validate_credentials(
-    credentials: &Credentials,
+    credentials: Credentials,
     db_pool: &PgPool,
 ) -> Result<uuid::Uuid, PublishError> {
-    let password_hash = sha3::Sha3_256::digest(credentials.password.expose_secret().as_bytes());
-    let password_hash = format!("{:x}", password_hash);
+    let (user_id, expected_password_hash) = get_stored_credentials(&credentials.username, db_pool)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("Unknown username"))
+        .map_err(PublishError::UnexpectedError)?;
 
-    let user_id = sqlx::query!(
-        r#"select user_id from users where name=$1 and password_hash=$2"#,
-        &credentials.username,
-        password_hash,
+    // compute hash in blocking thread
+    let _ = tokio::task::spawn_blocking(move || {
+        verify_password_hash(credentials.password, expected_password_hash)
+    })
+    .await
+    .context("Failed to spawn thread")
+    .map_err(PublishError::UnexpectedError)?;
+
+    Ok(user_id)
+}
+
+async fn get_stored_credentials(
+    username: &str,
+    db_pool: &PgPool,
+) -> Result<Option<(Uuid, Secret<String>)>, PublishError> {
+    let row = sqlx::query!(
+        r#"select user_id, password_hash from users where name=$1"#,
+        username
     )
     .fetch_optional(db_pool)
     .await
-    .context("Failed to run query")
-    .map_err(|e| PublishError::UnexpectedError(e))?;
+    .context("Failed to execute query")
+    .map_err(PublishError::UnexpectedError)?
+    .map(|row| (row.user_id, Secret::new(row.password_hash)));
 
-    user_id
-        .map(|row| row.user_id)
-        .ok_or_else(|| anyhow::anyhow!("No user found with provided credentials"))
+    Ok(row)
+}
+
+fn verify_password_hash(
+    password: Secret<String>,
+    expected_hash: Secret<String>,
+) -> Result<(), PublishError> {
+    let expected_password_hash = PasswordHash::new(&expected_hash.expose_secret())
+        .context("Failed to parse password into PHC format")
+        .map_err(PublishError::UnexpectedError)?;
+
+    Argon2::default()
+        .verify_password(password.expose_secret().as_bytes(), &expected_password_hash)
+        .context("Invalid password")
         .map_err(PublishError::AuthErr)
 }
 

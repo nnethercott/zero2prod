@@ -1,8 +1,9 @@
 use actix_web::http::StatusCode;
+use argon2::{password_hash::SaltString, Argon2, PasswordHasher};
 use linkify::{LinkFinder, LinkKind};
+use rand::thread_rng;
 use reqwest::{get, Client, Response, Url};
 use secrecy::Secret;
-use sha3::{Digest, Sha3_256};
 use sqlx::{postgres::PgPoolOptions, Connection, Executor, PgConnection, PgPool};
 use std::{net::TcpListener, sync::LazyLock};
 use tracing_subscriber::fmt::format;
@@ -38,13 +39,16 @@ impl TestUser {
         }
     }
     pub async fn store(&self, pool: &PgPool) {
-        let password_hash = Sha3_256::digest(&self.password.as_bytes());
+        let salt = SaltString::generate(&mut thread_rng());
+        let password_hash = Argon2::default()
+            .hash_password(self.password.as_bytes(), &salt)
+            .unwrap();
 
         sqlx::query!(
             r#"insert into users values($1, $2, $3)"#,
             &self.user_id,
             &self.username,
-            format!("{:x}", password_hash),
+            password_hash.to_string(),
         )
         .execute(pool)
         .await

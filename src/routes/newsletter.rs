@@ -1,4 +1,4 @@
-use crate::{domain::SubscriberEmail, email_client::EmailClient};
+use crate::{authentication::{validate_credentials, AuthError, Credentials}, domain::SubscriberEmail, email_client::EmailClient};
 use actix_web::{
     http::{
         header::{self, HeaderMap, HeaderValue},
@@ -8,12 +8,10 @@ use actix_web::{
     HttpRequest, HttpResponse, ResponseError,
 };
 use anyhow::Context;
-use argon2::{Argon2, PasswordHash, PasswordVerifier};
 use base64::Engine;
-use secrecy::{ExposeSecret, Secret};
+use secrecy::Secret;
 use serde::Deserialize;
 use sqlx::{query, PgPool};
-use uuid::Uuid;
 
 /// type-driven design !
 /// example body:
@@ -72,7 +70,13 @@ pub async fn publish_newsletter<'a>(
 ) -> Result<HttpResponse, PublishError> {
     let credentials =
         basic_authentication(&request.headers()).map_err(|e| PublishError::AuthErr(e))?;
-    let _user_id = validate_credentials(credentials, &pool).await?;
+
+    let _user_id = validate_credentials(credentials, &pool).await.map_err(|e|{
+        match e{
+            AuthError::UnexpectedError(err) => PublishError::UnexpectedError(err.into()),
+            AuthError::InvalidCredentials(err) => PublishError::AuthErr(err.into()),
+        }
+    });
 
     let subscribers = get_confirmed_subscribers(pool.as_ref())
         .await
@@ -115,62 +119,6 @@ async fn get_confirmed_subscribers(
         .collect();
 
     Ok(rows)
-}
-
-struct Credentials {
-    username: String,
-    password: Secret<String>,
-}
-
-async fn validate_credentials(
-    credentials: Credentials,
-    db_pool: &PgPool,
-) -> Result<uuid::Uuid, PublishError> {
-    let (user_id, expected_password_hash) = get_stored_credentials(&credentials.username, db_pool)
-        .await?
-        .ok_or_else(|| anyhow::anyhow!("Unknown username"))
-        .map_err(PublishError::UnexpectedError)?;
-
-    // compute hash in blocking thread
-    let _ = tokio::task::spawn_blocking(move || {
-        verify_password_hash(credentials.password, expected_password_hash)
-    })
-    .await
-    .context("Failed to spawn thread")
-    .map_err(PublishError::UnexpectedError)?;
-
-    Ok(user_id)
-}
-
-async fn get_stored_credentials(
-    username: &str,
-    db_pool: &PgPool,
-) -> Result<Option<(Uuid, Secret<String>)>, PublishError> {
-    let row = sqlx::query!(
-        r#"select user_id, password_hash from users where name=$1"#,
-        username
-    )
-    .fetch_optional(db_pool)
-    .await
-    .context("Failed to execute query")
-    .map_err(PublishError::UnexpectedError)?
-    .map(|row| (row.user_id, Secret::new(row.password_hash)));
-
-    Ok(row)
-}
-
-fn verify_password_hash(
-    password: Secret<String>,
-    expected_hash: Secret<String>,
-) -> Result<(), PublishError> {
-    let expected_password_hash = PasswordHash::new(&expected_hash.expose_secret())
-        .context("Failed to parse password into PHC format")
-        .map_err(PublishError::UnexpectedError)?;
-
-    Argon2::default()
-        .verify_password(password.expose_secret().as_bytes(), &expected_password_hash)
-        .context("Invalid password")
-        .map_err(PublishError::AuthErr)
 }
 
 fn basic_authentication(headers: &HeaderMap) -> Result<Credentials, anyhow::Error> {

@@ -1,5 +1,6 @@
 use quickcheck::Testable;
 use serde_json::json;
+use uuid::Uuid;
 use wiremock::{
     matchers::{any, method, path},
     Mock, MockServer, ResponseTemplate,
@@ -122,5 +123,22 @@ async fn requests_missing_authentication_are_rejected(){
 ;
     assert_eq!(response.status().as_u16(), 401);
 
+    assert_eq!(r#"Basic realm="publish""#, response.headers()["WWW-Authenticate"]);
+}
+
+async fn non_existing_user_is_rejected(){
+    let app = spawn_app().await;
+
+    let username = Uuid::new_v4().to_string();
+    let password = Uuid::new_v4().to_string();
+
+    let response = reqwest::Client::new()
+            .post(&format!("{}/newsletters", &app.address))
+            .basic_auth(username, Some(password))
+            .send()
+            .await
+            .expect("failed to post to /newsletters")
+;
+    assert_eq!(response.status().as_u16(), 401);
     assert_eq!(r#"Basic realm="publish""#, response.headers()["WWW-Authenticate"]);
 }

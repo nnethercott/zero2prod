@@ -27,11 +27,11 @@ pub struct Credentials {
     pub password: Secret<String>,
 }
 
+/// validation fn simulating same level of work if no user found
 pub async fn validate_credentials(
     credentials: Credentials,
     db_pool: &PgPool,
 ) -> Result<uuid::Uuid, AuthError> {
-    // default values to simulate work if user does not exist
     let mut user_id = None;
     let mut expected_password_hash = Secret::new(
         "$argon2id$v=19$m=15000,t=2,p=1$\

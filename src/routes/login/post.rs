@@ -1,16 +1,19 @@
 use actix_web::{
-    http::{header::LOCATION, StatusCode},
-    web, HttpResponse, ResponseError,
+    error::InternalError,
+    http::header::LOCATION,
+    web, HttpResponse,
 };
-use secrecy::Secret;
+use hmac::{Hmac, Mac};
+use secrecy::{ExposeSecret, Secret};
 use serde::Deserialize;
+use sha2::Sha256;
 use sqlx::PgPool;
 
-use crate::authentication::{validate_credentials, AuthError, Credentials};
+use crate::{authentication::{validate_credentials, AuthError, Credentials}, HmacSecret};
 
 #[derive(Deserialize)]
 pub struct LoginData {
-    username: String,
+    username: String, // match the arg names in the form !
     password: Secret<String>,
 }
 
@@ -22,39 +25,40 @@ pub enum LoginError {
     UnexpectedError(#[from] anyhow::Error),
 }
 
-impl ResponseError for LoginError {
-    fn error_response(&self) -> HttpResponse<actix_web::body::BoxBody> {
-        // urlencode the query param
-        let encoded_error = urlencoding::Encoded::new(self.to_string());
-        HttpResponse::SeeOther()
-            .insert_header((LOCATION, format!("/login?error={}", encoded_error)))
-            .finish()
-    }
-    fn status_code(&self) -> StatusCode {
-        match self {
-            Self::AuthError(_) => StatusCode::UNAUTHORIZED,
-            Self::UnexpectedError(_) => StatusCode::INTERNAL_SERVER_ERROR,
-        }
-    }
-}
-
 pub async fn login(
     form: web::Form<LoginData>,
     pool: web::Data<PgPool>,
-) -> Result<HttpResponse, LoginError> {
+    secret: web::Data<HmacSecret>,
+) -> Result<HttpResponse, InternalError<LoginError>> {
     //validate login data
     let credentials = Credentials {
         username: form.0.username,
         password: form.0.password,
     };
-    let _user_id = validate_credentials(credentials, &pool)
-        .await
-        .map_err(|e| match e {
-            AuthError::InvalidCredentials(e) => LoginError::AuthError(e),
-            AuthError::UnexpectedError(e) => LoginError::UnexpectedError(e),
-        })?;
+    match validate_credentials(credentials, &pool).await {
+        Ok(_) => Ok(HttpResponse::SeeOther()
+            .insert_header((LOCATION, "/"))
+            .finish()),
+        Err(e) => {
+            let e = match e {
+                AuthError::InvalidCredentials(e) => LoginError::AuthError(e),
+                AuthError::UnexpectedError(e) => LoginError::UnexpectedError(e),
+            };
 
-    Ok(HttpResponse::SeeOther()
-        .insert_header((LOCATION, "/"))
-        .finish())
+            let query_string = format!("error={}", urlencoding::Encoded::new(e.to_string()));
+
+            let hmac_tag = {
+                let mut mac =
+                    Hmac::<Sha256>::new_from_slice(secret.0.expose_secret().as_bytes()).unwrap();
+                mac.update(query_string.as_bytes());
+                mac.finalize().into_bytes()
+            };
+
+            let response = HttpResponse::SeeOther()
+                .insert_header((LOCATION, format!("/login?{query_string}&tag={hmac_tag:x}")))
+                .finish();
+
+            Err(InternalError::from_response(e, response))
+        }
+    }
 }

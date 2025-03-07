@@ -1,5 +1,6 @@
 app:
   port: 8000
+  hmac_secret: natenethercott
 database:
   host: "localhost"
   port: 5432

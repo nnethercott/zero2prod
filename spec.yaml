@@ -13,6 +13,10 @@ services:
       - key: APP__APP_BASE_URL
         value: ${APP_URL}
         scope: RUN_TIME
+      # TODO: configure this in digital ocean
+      # - key: APP__HMAC_SECRET
+      #   value: ${APP_HMAC_SECRET}
+      #   scope: RUN_TIME
       - key: APP_DATABASE__USERNAME
         value: ${newsletter.USERNAME}
         scope: RUN_TIME

@@ -18,6 +18,8 @@ base64 = "0.22.1"
 chrono = {version = "0.4.39", default-features=false, features = ["clock"]}
 claims = "0.8.0"
 config = "0.15.5"
+hex = "0.4.3"
+hmac = { version = "0.12", features = ["std"] }
 htmlescape = "0.3.1"
 linkify = "0.10.0"
 log = "0.4.25"
@@ -26,6 +28,7 @@ secrecy = { version = "0.8", features = ["serde"] }
 serde = {version = "1", features = ["derive"]}
 serde-aux = "4"
 serde_json = "1.0.138"
+sha2 = "0.10.8"
 thiserror = "2.0.11"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 tracing = { version = "0.1.41", features = ["log"] }

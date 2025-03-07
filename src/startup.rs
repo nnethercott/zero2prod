@@ -1,3 +1,4 @@
+use secrecy::Secret;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 use std::net::TcpListener;
@@ -9,7 +10,6 @@ use crate::configuration::{DatabaseSettings, Settings};
 use crate::email_client::EmailClient;
 use crate::routes::*;
 
-
 pub fn get_connection_pool(config: &DatabaseSettings) -> PgPool {
     // since its lazy fn doesn't need to be async
     PgPoolOptions::new().connect_lazy_with(config.connect_options())
@@ -19,6 +19,8 @@ pub struct Application {
     port: u16,
     server: Server,
 }
+
+pub struct HmacSecret(pub Secret<String>);
 
 impl Application {
     pub async fn build(settings: Settings) -> Result<Self, std::io::Error> {
@@ -38,12 +40,15 @@ impl Application {
         let listener = TcpListener::bind(address)?;
 
         let port = listener.local_addr().unwrap().port();
-        let server = run(listener, db_pool, email_client, app_settings.base_url)?;
+        let server = run(
+            listener,
+            db_pool,
+            email_client,
+            app_settings.base_url,
+            app_settings.hmac_secret,
+        )?;
 
-        Ok(Self {
-            port,
-            server,
-        })
+        Ok(Self { port, server })
     }
 
     pub fn port(&self) -> u16 {
@@ -62,6 +67,7 @@ pub fn run(
     db_pool: PgPool,
     email_client: EmailClient,
     base_url: String, // set in env
+    hmac_secret: Secret<String>,
 ) -> Result<Server, std::io::Error> {
     println!("{:?}", listener.local_addr());
 
@@ -69,6 +75,7 @@ pub fn run(
     let connection = web::Data::new(db_pool);
     let email_client = web::Data::new(email_client);
     let base_url = web::Data::new(ApplicationBaseUrl(base_url));
+    let hmac_secret = web::Data::new(HmacSecret(hmac_secret.clone()));
 
     let server = HttpServer::new(move || {
         //builder pattern
@@ -76,7 +83,8 @@ pub fn run(
             .wrap(Logger::default())
             .app_data(connection.clone())
             .app_data(email_client.clone()) // wanna reuse same email client ?
-            .app_data(base_url.clone()) // wanna reuse same email client ?
+            .app_data(base_url.clone())
+            .app_data(hmac_secret.clone())
             .route("/health_check", web::get().to(check_health))
             .route("/nate", web::get().to(nate))
             .route("/subscribe", web::post().to(subscribe))
@@ -105,4 +113,3 @@ impl Responder for Nate {
 async fn nate() -> impl Responder {
     Nate
 }
-

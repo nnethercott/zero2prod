@@ -37,7 +37,7 @@ impl AsRef<str> for SubscriberName{
 #[cfg(test)]
 mod test{
     use super::*;
-    use unicode_segmentation::UnicodeSegmentation;
+    
     use claims::{assert_err, assert_ok};
 
     #[test]

@@ -1,6 +1,5 @@
 use crate::helpers::spawn_app;
-use linkify::{LinkFinder, LinkKind};
-use reqwest::{self, Url};
+use reqwest::{self};
 use tokio;
 
 #[tokio::test]
@@ -24,7 +23,7 @@ async fn link_returned_by_subscribe_returns_200_if_called() {
     let email_request = &app.email_server.received_requests().await.unwrap()[0];
 
     let links = app.get_confirmation_links(&email_request);
-    let mut confirmation_link = links.text;
+    let confirmation_link = links.text;
 
     assert_eq!(confirmation_link.host_str().unwrap(), "127.0.0.1");
 

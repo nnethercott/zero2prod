@@ -1,5 +1,4 @@
 use crate::helpers::spawn_app;
-use linkify::{LinkFinder, LinkKind};
 use tokio;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};

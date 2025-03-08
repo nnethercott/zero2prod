@@ -1,24 +1,20 @@
-use actix_web::http::StatusCode;
 use argon2::{password_hash::SaltString, Argon2, Params, PasswordHasher};
 use linkify::{LinkFinder, LinkKind};
 use rand::thread_rng;
-use reqwest::{get, Client, Response, Url};
+use reqwest::{redirect::Policy, Url};
 use secrecy::Secret;
-use sqlx::{postgres::PgPoolOptions, Connection, Executor, PgConnection, PgPool};
-use std::{net::TcpListener, sync::LazyLock};
-use tracing_subscriber::fmt::format;
+use serde::Serialize;
+use sqlx::{Connection, Executor, PgConnection, PgPool};
+use std::sync::LazyLock;
 use uuid::Uuid;
 use wiremock::MockServer;
 use zero2prod::{
     configuration::{get_configuration, DatabaseSettings},
-    email_client::{self, EmailClient},
     get_connection_pool,
-    routes::BodyData,
     telemetry::{get_subscriber, init_subscriber},
     Application,
 };
 
-use once_cell::sync::Lazy;
 
 pub struct ConfirmationLinks {
     pub html: reqwest::Url,
@@ -67,11 +63,12 @@ pub struct TestApp {
     pub email_server: MockServer,
     pub port: u16,
     pub user: TestUser,
+    pub app_client: reqwest::Client,
 }
 
 impl TestApp {
     pub async fn post_subscriptions<T: Into<String>>(&self, body: T) -> reqwest::Response {
-        reqwest::Client::new()
+        self.app_client
             .post(&format!("{}/subscribe", &self.address))
             .header("Content-Type", "application/x-www-form-urlencoded")
             .body(body.into())
@@ -81,7 +78,7 @@ impl TestApp {
     }
 
     pub async fn post_newsletters(&self, body: &serde_json::Value) -> reqwest::Response {
-        reqwest::Client::new()
+        self.app_client
             .post(&format!("{}/newsletters", &self.address))
             .basic_auth(&self.user.username, Some(&self.user.password))
             // equivalent to: .header("Authorization", "Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==")
@@ -89,6 +86,29 @@ impl TestApp {
             .send()
             .await
             .expect("Failed to execute request.")
+    }
+
+    pub async fn post_login<Body>(&self, body: &Body) -> reqwest::Response
+    where
+        Body: Serialize,
+    {
+        self.app_client
+            .post(&format!("{}/login", &self.address))
+            .form(body)
+            .send()
+            .await
+            .expect("failed to POST to login")
+    }
+
+    pub async fn get_login_html(&self) -> String {
+        self.app_client
+            .get(&format!("{}/login", &self.address))
+            .send()
+            .await
+            .expect("failed to POST to login")
+            .text()
+            .await
+            .unwrap()
     }
 
     pub fn get_confirmation_links(&self, email_request: &wiremock::Request) -> ConfirmationLinks {
@@ -185,13 +205,28 @@ pub async fn spawn_app() -> TestApp {
     let user = TestUser::generate();
     user.store(&db_pool).await;
 
+    //
+    let app_client = reqwest::ClientBuilder::new()
+        .redirect(Policy::none())
+        .cookie_store(true)
+        .build()
+        .unwrap();
+
     let test_app = TestApp {
         address,
         db_pool,
         email_server,
         port,
         user,
+        app_client,
     };
 
     test_app
+}
+
+pub fn assert_is_redirect_to(response: &reqwest::Response, location: &str) {
+    // assert status code
+    assert_eq!(response.status().as_u16(), 303);
+    // assert redirect location
+    assert_eq!(response.headers().get("Location").unwrap(), location);
 }

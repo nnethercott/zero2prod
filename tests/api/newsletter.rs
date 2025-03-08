@@ -1,9 +1,8 @@
-use quickcheck::Testable;
 use serde_json::json;
 use uuid::Uuid;
 use wiremock::{
     matchers::{any, method, path},
-    Mock, MockServer, ResponseTemplate,
+    Mock, ResponseTemplate,
 };
 
 use crate::helpers::{spawn_app, ConfirmationLinks, TestApp};

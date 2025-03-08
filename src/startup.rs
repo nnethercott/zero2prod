@@ -39,13 +39,15 @@ impl Application {
         let address = format!("{}:{}", app_settings.host, app_settings.port);
         let listener = TcpListener::bind(address)?;
 
+        let hmac_secret = app_settings.hmac_secret;
+
         let port = listener.local_addr().unwrap().port();
         let server = run(
             listener,
             db_pool,
             email_client,
             app_settings.base_url,
-            app_settings.hmac_secret,
+            hmac_secret,
         )?;
 
         Ok(Self { port, server })
@@ -75,7 +77,7 @@ pub fn run(
     let connection = web::Data::new(db_pool);
     let email_client = web::Data::new(email_client);
     let base_url = web::Data::new(ApplicationBaseUrl(base_url));
-    let hmac_secret = web::Data::new(HmacSecret(hmac_secret.clone()));
+    let hmac_secret = web::Data::new(HmacSecret(hmac_secret));
 
     let server = HttpServer::new(move || {
         //builder pattern

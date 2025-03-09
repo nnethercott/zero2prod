@@ -11,6 +11,8 @@ path = "src/main.rs"
 name = "zero2prod"
 
 [dependencies]
+actix-web-flash-messages = { version = "0.5", features = ["cookies"] }
+actix-session = {version = "0.7", features = ["redis-rs-tls-session"]}
 actix-web = "4"
 anyhow = "1.0.96"
 argon2 = { version = "0.4", features = ["std"] }
@@ -34,7 +36,7 @@ tracing-log = "0.2.0"
 tracing-subscriber = { version = "0.3.19", features = ["registry", "env-filter"] }
 unicode-segmentation = "1.12.0"
 urlencoding = "2.1.3"
-uuid = {version="1.11.1", features = ["v4"]}
+uuid = {version="1.11.1", features = ["v4", "serde"]}
 validator = { version = "0.20.0", features = ["derive"] }
 wiremock = "0.6.2"
 

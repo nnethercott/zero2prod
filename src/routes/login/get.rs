@@ -1,14 +1,12 @@
-use actix_web::{
-    cookie::Cookie,
-    http::header::ContentType,
-    HttpRequest, HttpResponse,
-};
+use actix_web::{http::header::ContentType, HttpResponse};
+use actix_web_flash_messages::IncomingFlashMessages;
+use std::fmt::Write;
 
-pub async fn login_form(request: HttpRequest) -> HttpResponse {
-    let error_html = match request.cookie("_flash") {
-        Some(c) => format!("<p><i>{}</i></p>", c.value()),
-        None => "".into(),
-    };
+pub async fn login_form(flash_messages: IncomingFlashMessages) -> HttpResponse {
+    let mut error_html = String::new();
+    for m in flash_messages.iter() {
+        writeln!(error_html, "<p><i>{}</i></p>", m.content()).unwrap();
+    }
 
     let body = format!(
         r#"<!DOCTYPE html>
@@ -38,14 +36,9 @@ pub async fn login_form(request: HttpRequest) -> HttpResponse {
     );
 
     // on every response we unset the error cookie
-    let mut response = HttpResponse::Ok()
+    HttpResponse::Ok()
         .content_type(ContentType::html())
-        .body(body);
-
-    response
-        .add_removal_cookie(&Cookie::new("_flash", ""))
-        .unwrap();
-    response
+        .body(body)
 }
 
 // #[derive(Deserialize)]

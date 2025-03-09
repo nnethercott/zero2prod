@@ -1,13 +1,12 @@
 use actix_web::{
-    error::InternalError,
-    http::header::LOCATION,
-    web, HttpResponse,
+    error::InternalError, http::header::LOCATION, web, HttpResponse,
 };
+use actix_web_flash_messages::FlashMessage;
 use secrecy::Secret;
 use serde::Deserialize;
 use sqlx::PgPool;
 
-use crate::authentication::{validate_credentials, AuthError, Credentials};
+use crate::{authentication::{validate_credentials, AuthError, Credentials}, session_state::TypedSession};
 
 #[derive(Deserialize)]
 pub struct LoginData {
@@ -23,9 +22,19 @@ pub enum LoginError {
     UnexpectedError(#[from] anyhow::Error),
 }
 
+pub fn login_redirect(error: LoginError) -> InternalError<LoginError> {
+    FlashMessage::error(error.to_string()).send();
+
+    let response = HttpResponse::SeeOther()
+        .insert_header((LOCATION, "/login"))
+        .finish();
+    InternalError::from_response(error, response)
+}
+
 pub async fn login(
     form: web::Form<LoginData>,
     pool: web::Data<PgPool>,
+    session: TypedSession,
 ) -> Result<HttpResponse, InternalError<LoginError>> {
     //validate login data
     let credentials = Credentials {
@@ -33,9 +42,16 @@ pub async fn login(
         password: form.0.password,
     };
     match validate_credentials(credentials, &pool).await {
-        Ok(_) => Ok(HttpResponse::SeeOther()
-            .insert_header((LOCATION, "/"))
-            .finish()),
+        Ok(user_id) => {
+            //update session for user
+            session.renew(); // NOTE: rotate session keys on login
+            session.insert_user_id(user_id)
+                .map_err(|e| login_redirect(LoginError::UnexpectedError(e.into())))?;
+
+            Ok(HttpResponse::SeeOther()
+                .insert_header((LOCATION, "/admin/dashboard"))
+                .finish())
+        }
         Err(e) => {
             let e = match e {
                 AuthError::InvalidCredentials(e) => LoginError::AuthError(e),
@@ -52,13 +68,7 @@ pub async fn login(
             //     mac.finalize().into_bytes()
             // };
 
-            let response = HttpResponse::SeeOther()
-                // .insert_header((LOCATION, format!("/login?{query_string}&tag={hmac_tag:x}")))
-                .insert_header((LOCATION, format!("/login")))
-                .insert_header(("Set-Cookie", format!("_flash={e}")))
-                .finish();
-
-            Err(InternalError::from_response(e, response))
+            Err(login_redirect(e))
         }
     }
 }

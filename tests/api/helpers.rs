@@ -1,3 +1,4 @@
+use actix_web::HttpResponse;
 use argon2::{password_hash::SaltString, Argon2, Params, PasswordHasher};
 use linkify::{LinkFinder, LinkKind};
 use rand::thread_rng;
@@ -15,7 +16,6 @@ use zero2prod::{
     Application,
 };
 
-
 pub struct ConfirmationLinks {
     pub html: reqwest::Url,
     pub text: reqwest::Url,
@@ -23,8 +23,8 @@ pub struct ConfirmationLinks {
 
 pub struct TestUser {
     user_id: Uuid,
-    username: String,
-    password: String,
+    pub username: String,
+    pub password: String,
 }
 impl TestUser {
     pub fn generate() -> Self {
@@ -98,6 +98,18 @@ impl TestApp {
             .send()
             .await
             .expect("failed to POST to login")
+    }
+
+    pub async fn get_admin_dashboard(&self) -> reqwest::Response {
+        self.app_client
+            .get(format!("{}/admin/dashboard", &self.address))
+            .send()
+            .await
+            .expect("Failed to execute request")
+    }
+
+    pub async fn get_admin_dashboard_html(&self) -> String {
+        self.get_admin_dashboard().await.text().await.unwrap()
     }
 
     pub async fn get_login_html(&self) -> String {

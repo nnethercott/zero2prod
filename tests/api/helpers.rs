@@ -1,4 +1,3 @@
-use actix_web::HttpResponse;
 use argon2::{password_hash::SaltString, Argon2, Params, PasswordHasher};
 use linkify::{LinkFinder, LinkKind};
 use rand::thread_rng;
@@ -20,6 +19,8 @@ pub struct ConfirmationLinks {
     pub html: reqwest::Url,
     pub text: reqwest::Url,
 }
+
+//everythinghastostartsomewhere
 
 pub struct TestUser {
     user_id: Uuid,
@@ -98,6 +99,30 @@ impl TestApp {
             .send()
             .await
             .expect("failed to POST to login")
+    }
+
+    pub async fn post_change_password<Body>(&self, body: &Body) -> reqwest::Response
+    where
+        Body: Serialize,
+    {
+        self.app_client
+            .post(format!("{}/admin/password", self.address))
+            .form(body)
+            .send()
+            .await
+            .expect("failed to POST change_password")
+    }
+
+    pub async fn get_change_password(&self) -> reqwest::Response {
+        self.app_client
+            .get(format!("{}/admin/password", self.address))
+            .send()
+            .await
+            .expect("failed to GET change_password")
+    }
+
+    pub async fn get_change_password_html(&self) -> String {
+        self.get_change_password().await.text().await.unwrap()
     }
 
     pub async fn get_admin_dashboard(&self) -> reqwest::Response {

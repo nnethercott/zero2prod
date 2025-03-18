@@ -4,6 +4,7 @@ pub mod startup;
 pub mod telemetry;
 pub mod domain;
 pub mod email_client;
+mod utils;
 
 pub mod authentication;
 pub mod session_state;

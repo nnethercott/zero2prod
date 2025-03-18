@@ -1,17 +1,10 @@
-use actix_web::{error::ErrorInternalServerError, http::header::{ContentType, LOCATION}, web, HttpResponse};
+use crate::utils::{e500, see_other};
+use actix_web::{http::header::ContentType, web, HttpResponse};
 use anyhow::Context;
 use sqlx::PgPool;
-use std::fmt::{Debug, Display};
 use uuid::Uuid;
 
 use crate::session_state::TypedSession;
-
-fn e500<E>(e: E) -> actix_web::Error
-where
-    E: Debug + Display + 'static,
-{
-    ErrorInternalServerError(e)
-}
 
 pub async fn admin_dashboard(
     session: TypedSession,
@@ -23,9 +16,7 @@ pub async fn admin_dashboard(
                 .await
                 .map_err(e500)?
         } else {
-            return Ok(HttpResponse::SeeOther()
-                .insert_header((LOCATION, "/login"))
-                .finish());
+            return Ok(see_other("/login"));
         }
     };
     Ok(HttpResponse::Ok()
@@ -36,15 +27,19 @@ pub async fn admin_dashboard(
 <html lang="en">
   <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="Admin dashboard" content="width=device-width, initial-scale=1">
     <title></title>
     <link href="css/style.css" rel="stylesheet">
   </head>
   <body>
     <p>Welcome {username} !</p> 
+    <p>available actions:</p>
+    <ol>
+      <li><a href="/admin/password">change password</a></li>
+    </ol>
   </body>
 </html>
-"#
+        "#
         )))
 }
 

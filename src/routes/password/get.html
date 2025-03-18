@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title></title>
+    <link href="css/style.css" rel="stylesheet">
+  </head>
+  <body>
+  <form action="/admin/password" method="post">
+     <label for="">
+        Current password
+        <input type="password" name="old_password" value="enter password">
+      </label>
+     <label for="">
+        New password
+        <input type="password" name="new_password" placeholder="enter new password">
+      </label>
+     <label for="">
+        Confirm new password
+        <input type="password" name="confirm_new_password" value="confirm new password">
+      </label>
+
+      <button type="submit">confirm</button>
+  </form>
+    <p><a href="/admin/dashboard">&lt;- Back</a></p>
+  </body>
+</html>

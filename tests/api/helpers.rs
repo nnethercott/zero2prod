@@ -101,6 +101,15 @@ impl TestApp {
             .expect("failed to POST to login")
     }
 
+    // NOTE: an example of a POST taking no payload
+    pub async fn post_logout(&self) -> reqwest::Response{
+        self.app_client
+            .post(&format!("{}/admin/logout", &self.address))
+            .send()
+            .await
+            .expect("failed to POST to login")
+    }
+
     pub async fn post_change_password<Body>(&self, body: &Body) -> reqwest::Response
     where
         Body: Serialize,

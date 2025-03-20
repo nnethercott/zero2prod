@@ -36,6 +36,9 @@ pub async fn admin_dashboard(
     <p>available actions:</p>
     <ol>
       <li><a href="/admin/password">change password</a></li>
+      <li><form name="logoutForm" action="/admin/logout" method="post">
+       <input type="submit" value="Logout"> 
+      </form></li>
     </ol>
   </body>
 </html>
@@ -43,7 +46,7 @@ pub async fn admin_dashboard(
         )))
 }
 
-async fn get_username(db_pool: &PgPool, user_id: Uuid) -> Result<String, anyhow::Error> {
+pub async fn get_username(db_pool: &PgPool, user_id: Uuid) -> Result<String, anyhow::Error> {
     let row = sqlx::query!("select name from users where user_id=$1", user_id)
         .fetch_one(db_pool)
         .await

@@ -104,5 +104,10 @@ async fn logout_clears_session_state() {
     assert!(html_page.contains("You have successfully logged out"));
 
     // Part 5. login with new password
-    // NOTE: will fail since we haven't updated the db
+    let response = app.post_login(&json!({
+        "username": app.user.username,
+        "password": new_password,
+    }))
+    .await;
+    assert_is_redirect_to(&response, "/admin/dashboard");
 }

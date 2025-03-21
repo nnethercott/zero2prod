@@ -5,7 +5,10 @@ use serde::Deserialize;
 use sqlx::PgPool;
 
 use crate::{
-    authentication::{validate_credentials, AuthError, Credentials}, routes::get_username, session_state::TypedSession, utils::{e500, see_other}
+    authentication::{self, validate_credentials, AuthError, Credentials},
+    routes::get_username,
+    session_state::TypedSession,
+    utils::{e500, see_other},
 };
 
 #[derive(Deserialize)]
@@ -38,15 +41,20 @@ pub async fn change_password(
     };
 
     // if this is an error do something
-    if let Err(e) = validate_credentials(credentials, &db_pool).await{
+    if let Err(e) = validate_credentials(credentials, &db_pool).await {
         return match e {
-           AuthError::InvalidCredentials(_) => {
+            AuthError::InvalidCredentials(_) => {
                 FlashMessage::error("<p><i>Current password is incorrect</i></p>").send();
                 return Ok(see_other("/admin/password"));
             }
-            AuthError::UnexpectedError(_) => Err(e500(e).into())
-        }
+            AuthError::UnexpectedError(_) => Err(e500(e).into()),
+        };
     }
+
+    // update new password hash
+    authentication::change_password(user_id, form.0.new_password, &db_pool)
+        .await
+        .map_err(e500)?;
 
     FlashMessage::info("<p><i>Password changed successfully</i></p>").send();
     Ok(see_other("/admin/password"))

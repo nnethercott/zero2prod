@@ -1,4 +1,5 @@
-use crate::{authentication::{validate_credentials, AuthError, Credentials}, domain::SubscriberEmail, email_client::EmailClient};
+
+use crate::{authentication::Credentials, domain::SubscriberEmail, email_client::EmailClient, utils::see_other};
 use actix_web::{
     http::{
         header::{self, HeaderMap, HeaderValue},
@@ -7,10 +8,11 @@ use actix_web::{
     web::{self},
     HttpRequest, HttpResponse, ResponseError,
 };
+use actix_web_flash_messages::FlashMessage;
 use anyhow::Context;
 use base64::Engine;
 use secrecy::Secret;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use sqlx::{query, PgPool};
 
 /// type-driven design !
@@ -22,12 +24,13 @@ use sqlx::{query, PgPool};
 ///         "html": "some stuff",
 ///     }
 /// }
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct BodyData {
     pub title: String,
+    #[serde(flatten)]
     pub content: Content,
 }
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct Content {
     pub text: String,
     pub html: String,
@@ -64,20 +67,10 @@ impl ResponseError for PublishError {
 #[tracing::instrument(name = "publish newsletter", skip(pool, body, email_client))]
 pub async fn publish_newsletter<'a>(
     pool: web::Data<PgPool>,
-    body: web::Json<BodyData>,
+    body: web::Form<BodyData>,
     email_client: web::Data<EmailClient>,
     request: HttpRequest,
 ) -> Result<HttpResponse, PublishError> {
-    let credentials =
-        basic_authentication(&request.headers()).map_err(|e| PublishError::AuthErr(e))?;
-
-    let _user_id = validate_credentials(credentials, &pool).await.map_err(|e|{
-        match e{
-            AuthError::UnexpectedError(err) => PublishError::UnexpectedError(err.into()),
-            AuthError::InvalidCredentials(err) => PublishError::AuthErr(err.into()),
-        }
-    });
-
     let subscribers = get_confirmed_subscribers(pool.as_ref())
         .await
         .context("failed to retrieve confirmed subs")?;
@@ -99,7 +92,10 @@ pub async fn publish_newsletter<'a>(
         }
     }
 
-    Ok(HttpResponse::Ok().finish())
+    // add a flash message
+    FlashMessage::info("Successfully sent out newsletter").send();
+
+    Ok(see_other("/admin/dashboard"))
 }
 
 #[tracing::instrument(name = "get all subscribers with `confirmed` status", skip(pool))]
@@ -121,6 +117,7 @@ async fn get_confirmed_subscribers(
     Ok(rows)
 }
 
+#[allow(dead_code)]
 fn basic_authentication(headers: &HeaderMap) -> Result<Credentials, anyhow::Error> {
     // The header value, if present, must be a valid UTF8 string
     let header_value = headers

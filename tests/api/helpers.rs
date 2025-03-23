@@ -78,12 +78,13 @@ impl TestApp {
             .expect("Failed to execute request.")
     }
 
-    pub async fn post_newsletters(&self, body: &serde_json::Value) -> reqwest::Response {
+    pub async fn post_newsletters<T: Into<String>>(&self, body: T) -> reqwest::Response {
         self.app_client
-            .post(&format!("{}/newsletters", &self.address))
-            .basic_auth(&self.user.username, Some(&self.user.password))
+            .post(&format!("{}/admin/newsletters", &self.address))
+            // .basic_auth(&self.user.username, Some(&self.user.password))
             // equivalent to: .header("Authorization", "Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==")
-            .json(&body)
+            .header("Content-Type", "application/x-www-form-urlencoded")
+            .body(body.into())
             .send()
             .await
             .expect("Failed to execute request.")

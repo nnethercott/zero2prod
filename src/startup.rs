@@ -112,7 +112,6 @@ pub async fn run(
             .route("/nate", web::get().to(nate))
             .route("/subscribe", web::post().to(subscribe))
             .route("/subscribe/confirm", web::get().to(confirm))
-            .route("/newsletters", web::post().to(publish_newsletter))
             .route("/", web::get().to(home))
             .route("/login", web::get().to(login_form))
             .route("/login", web::post().to(login))
@@ -122,7 +121,9 @@ pub async fn run(
                     .route("/dashboard", web::get().to(admin_dashboard))
                     .route("/password", web::get().to(change_password_form))
                     .route("/password", web::post().to(change_password))
-                    .route("/logout", web::post().to(logout)),
+                    .route("/logout", web::post().to(logout))
+                    .route("/newsletters", web::get().to(create_newsletter))
+                    .route("/newsletters", web::post().to(publish_newsletter))
             )
     })
     .listen(listener)?

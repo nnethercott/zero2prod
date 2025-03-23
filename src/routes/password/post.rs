@@ -5,9 +5,8 @@ use serde::Deserialize;
 use sqlx::PgPool;
 
 use crate::{
-    authentication::{self, validate_credentials, AuthError, Credentials},
+    authentication::{self, middleware::UserId, validate_credentials, AuthError, Credentials},
     routes::get_username,
-    session_state::TypedSession,
     utils::{e500, see_other},
 };
 
@@ -19,22 +18,17 @@ pub struct FormData {
 }
 
 pub async fn change_password(
-    session: TypedSession,
     form: web::Form<FormData>,
     db_pool: web::Data<PgPool>,
+    user_id: web::ReqData<UserId>,
 ) -> Result<HttpResponse, actix_web::Error> {
-    let user_id = match session.get_user_id().map_err(e500)? {
-        None => return Ok(see_other("/login")),
-        Some(uid) => uid,
-    };
-
+    let user_id = user_id.into_inner();
     if form.new_password.expose_secret() != form.confirm_new_password.expose_secret() {
         FlashMessage::error("<p><i>You entered two different passwords</i></p>").send();
         return Ok(see_other("/admin/password"));
     }
 
-    //TODO: get username from session.user_id
-    let username = get_username(&db_pool, user_id).await.map_err(e500)?;
+    let username = get_username(&db_pool, *user_id).await.map_err(e500)?;
     let credentials = Credentials {
         username,
         password: form.0.old_password,
@@ -52,7 +46,7 @@ pub async fn change_password(
     }
 
     // update new password hash
-    authentication::change_password(user_id, form.0.new_password, &db_pool)
+    authentication::change_password(*user_id, form.0.new_password, &db_pool)
         .await
         .map_err(e500)?;
 

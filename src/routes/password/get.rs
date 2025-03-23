@@ -1,22 +1,13 @@
 use actix_web::{http::header::ContentType, HttpResponse};
 use actix_web_flash_messages::IncomingFlashMessages;
 use std::fmt::Write;
-use crate::{
-    session_state::TypedSession,
-    utils::{e500, see_other},
-};
 
 pub async fn change_password_form(
-    session: TypedSession,
     flash_messages: IncomingFlashMessages,
 ) -> Result<HttpResponse, actix_web::Error> {
     let mut msg_html = "".to_string();
     for m in flash_messages.iter() {
         writeln!(msg_html, "<p><i>{}</i></p>", m.content()).unwrap();
-    }
-
-    if session.get_user_id().map_err(e500)?.is_none() {
-        return Ok(see_other("/login"));
     }
 
     let page_html = format!(r#"

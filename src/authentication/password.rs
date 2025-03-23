@@ -35,7 +35,7 @@ pub async fn validate_credentials(
     credentials: Credentials,
     db_pool: &PgPool,
 ) -> Result<uuid::Uuid, AuthError> {
-    // random hash as placeholder
+    // random hash requiring same amount of work to prevent against timing attacks
     let mut expected_password_hash = Secret::new(
         "$argon2id$v=19$m=15000,t=2,p=1$\
         gZiV/M1gPc22ElAH/Jh1Hw$\

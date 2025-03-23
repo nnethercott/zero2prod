@@ -1,6 +1,7 @@
 use actix_session::storage::RedisSessionStore;
 use actix_session::SessionMiddleware;
 use actix_web::cookie::Key;
+use actix_web::web::scope;
 use actix_web_flash_messages::storage::CookieMessageStore;
 use actix_web_flash_messages::FlashMessagesFramework;
 use secrecy::{ExposeSecret, Secret};
@@ -8,9 +9,10 @@ use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 use std::net::TcpListener;
 
-use actix_web::middleware::Logger;
+use actix_web::middleware::{from_fn, Logger};
 use actix_web::{dev::Server, web, App, HttpRequest, HttpResponse, HttpServer, Responder};
 
+use crate::authentication::middleware::reject_anonymous_users;
 use crate::configuration::{DatabaseSettings, Settings};
 use crate::email_client::EmailClient;
 use crate::routes::*;
@@ -55,7 +57,8 @@ impl Application {
             app_settings.base_url,
             hmac_secret,
             redis_uri,
-        ).await?;
+        )
+        .await?;
 
         Ok(Self { port, server })
     }
@@ -97,7 +100,10 @@ pub async fn run(
         App::new()
             .wrap(Logger::default())
             .wrap(message_framework.clone())
-            .wrap(SessionMiddleware::new(session_store.clone(), secret_key.clone()))
+            .wrap(SessionMiddleware::new(
+                session_store.clone(),
+                secret_key.clone(),
+            ))
             .app_data(connection.clone())
             .app_data(email_client.clone()) // wanna reuse same email client ?
             .app_data(base_url.clone())
@@ -110,10 +116,14 @@ pub async fn run(
             .route("/", web::get().to(home))
             .route("/login", web::get().to(login_form))
             .route("/login", web::post().to(login))
-            .route("/admin/dashboard", web::get().to(admin_dashboard))
-            .route("/admin/password", web::get().to(change_password_form))
-            .route("/admin/password", web::post().to(change_password))
-            .route("/admin/logout", web::post().to(logout))
+            .service(
+                scope("/admin")
+                    .wrap(from_fn(reject_anonymous_users))
+                    .route("/dashboard", web::get().to(admin_dashboard))
+                    .route("/password", web::get().to(change_password_form))
+                    .route("/password", web::post().to(change_password))
+                    .route("/logout", web::post().to(logout)),
+            )
     })
     .listen(listener)?
     .run();

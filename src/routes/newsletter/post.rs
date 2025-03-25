@@ -1,5 +1,10 @@
-
-use crate::{authentication::Credentials, domain::SubscriberEmail, email_client::EmailClient, utils::see_other};
+use crate::{
+    authentication::Credentials,
+    domain::SubscriberEmail,
+    email_client::EmailClient,
+    idempotency::IdempotencyKey,
+    utils::{e400, e500, see_other},
+};
 use actix_web::{
     http::{
         header::{self, HeaderMap, HeaderValue},
@@ -14,6 +19,7 @@ use base64::Engine;
 use secrecy::Secret;
 use serde::{Deserialize, Serialize};
 use sqlx::{query, PgPool};
+use uuid::Uuid;
 
 /// type-driven design !
 /// example body:
@@ -29,11 +35,22 @@ pub struct BodyData {
     pub title: String,
     #[serde(flatten)]
     pub content: Content,
+    idempotency_key: String,
 }
 #[derive(Serialize, Deserialize)]
 pub struct Content {
     pub text: String,
     pub html: String,
+}
+
+impl BodyData {
+    pub fn new(title: String, content: Content) -> Self {
+        Self {
+            title,
+            content,
+            idempotency_key: Uuid::new_v4().to_string(),
+        }
+    }
 }
 
 pub struct ConfirmedSubscriber {
@@ -64,28 +81,36 @@ impl ResponseError for PublishError {
     }
 }
 
-#[tracing::instrument(name = "publish newsletter", skip(pool, body, email_client))]
+#[tracing::instrument(name = "publish newsletter", skip(pool, form, email_client))]
 pub async fn publish_newsletter<'a>(
     pool: web::Data<PgPool>,
-    body: web::Form<BodyData>,
+    form: web::Form<BodyData>,
     email_client: web::Data<EmailClient>,
     request: HttpRequest,
-) -> Result<HttpResponse, PublishError> {
+) -> Result<HttpResponse, actix_web::Error> {
+    let BodyData {
+        title,
+        content,
+        idempotency_key,
+    } = form.0;
+    let idempotency_key: IdempotencyKey = idempotency_key.try_into().map_err(e400)?;
+
     let subscribers = get_confirmed_subscribers(pool.as_ref())
         .await
-        .context("failed to retrieve confirmed subs")?;
+        .context("failed to retrieve confirmed subs")
+        .map_err(e500)?;
 
     for subscriber in subscribers {
         match subscriber {
-            Ok(sub) => email_client
-                .send_email(
-                    &sub.email,
-                    &body.title,
-                    &body.content.text,
-                    &body.content.html,
-                )
-                .await
-                .with_context(|| format!("failed to send email to {:?}", sub.email))?,
+            Ok(sub) => {
+                let response = email_client
+                    .send_email(&sub.email, &title, &content.text, &content.html)
+                    .await
+                    .with_context(|| format!("failed to send email to {:?}", sub.email))
+                    .map_err(e500)?;
+
+                // TODO: cache response
+            }
             Err(_) => {
                 tracing::warn!("invalid email retrieved from db");
             }

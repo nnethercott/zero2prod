@@ -1,18 +1,21 @@
 use serde_json::json;
 use uuid::Uuid;
 use wiremock::{
-    matchers::{any, method, path},
+    matchers::{any, header, method, path},
     Mock, ResponseTemplate,
 };
 use zero2prod::routes::{BodyData, Content};
 
-use crate::{helpers::{assert_is_redirect_to, spawn_app, ConfirmationLinks, TestApp}, newsletter};
+use crate::{
+    helpers::{assert_is_redirect_to, spawn_app, ConfirmationLinks, TestApp},
+    newsletter,
+};
 
 // #[tokio::test]
 // #[ignore]
 // async fn fails_without_body_in_post() {
 //     let app = spawn_app().await;
-//     //login 
+//     //login
 //     app.post_login(&json!({
 //         "username": app.user.username,
 //         "password": app.user.password
@@ -50,7 +53,8 @@ async fn newsletters_are_not_delivered_to_unconfirmed_subscribers() {
     app.post_login(&json!({
         "username": app.user.username,
         "password": app.user.password
-    })).await;
+    }))
+    .await;
 
     //create a sub
     create_unconfirmed_user(&app).await;
@@ -62,13 +66,13 @@ async fn newsletters_are_not_delivered_to_unconfirmed_subscribers() {
         .await;
 
     // Act
-    let o = BodyData{
-        title: "Newsletter title".into(),
-        content: Content{
+    let o = BodyData::new(
+        "Newsletter title".into(),
+        Content {
             text: "Newsletter body as plain text".into(),
             html: "<p>Newsletter body as HTML</p>".into(),
-        }
-    };
+        },
+    );
 
     let newsletter_request_body = serde_urlencoded::to_string(o).unwrap();
     dbg!(&newsletter_request_body);
@@ -119,19 +123,19 @@ async fn create_confirmed_user(app: &TestApp) {
 }
 
 #[tokio::test]
-async fn requests_missing_authentication_are_rejected(){
+async fn requests_missing_authentication_are_rejected() {
     // mock post to publish with no header
     // inspect response to make sure we get a 401 Unauthorized
     let app = spawn_app().await;
     // NOTE: no login
 
-    let o = BodyData{
-        title: "not allowed".into(),
-        content: Content{
+    let o = BodyData::new(
+        "not allowed".into(),
+        Content {
             text: "content".into(),
             html: "content".into(),
-        }
-    };
+        },
+    );
     let newsletter = serde_urlencoded::to_string(o).unwrap();
 
     let response = app.post_newsletters(&newsletter).await;
@@ -141,24 +145,73 @@ async fn requests_missing_authentication_are_rejected(){
 }
 
 #[ignore = "deprecated basic auth"]
-async fn non_existing_user_is_rejected(){
+async fn non_existing_user_is_rejected() {
     let app = spawn_app().await;
-    //login 
+    //login
     app.post_login(&json!({
         "username": app.user.username,
         "password": app.user.password
-    })).await;
+    }))
+    .await;
 
     let username = Uuid::new_v4().to_string();
     let password = Uuid::new_v4().to_string();
 
     let response = reqwest::Client::new()
-            .post(&format!("{}/newsletters", &app.address))
-            .basic_auth(username, Some(password))
-            .send()
-            .await
-            .expect("failed to post to /newsletters")
-;
+        .post(&format!("{}/newsletters", &app.address))
+        .basic_auth(username, Some(password))
+        .send()
+        .await
+        .expect("failed to post to /newsletters");
     assert_eq!(response.status().as_u16(), 401);
-    assert_eq!(r#"Basic realm="publish""#, response.headers()["WWW-Authenticate"]);
+    assert_eq!(
+        r#"Basic realm="publish""#,
+        response.headers()["WWW-Authenticate"]
+    );
+}
+
+#[ignore = "wiremock matching fails ?"]
+#[tokio::test]
+async fn newletter_creation_is_idempotent() {
+    // Arrange
+    let app = spawn_app().await;
+    app.post_login(&json!({
+        "username": app.user.username,
+        "password": app.user.password
+    }))
+    .await;
+    create_unconfirmed_user(&app).await;
+
+    let _mock_guard = Mock::given(any())
+        // .and(method("POST"))
+        .respond_with(ResponseTemplate::new(200))
+        .named("idempotency")
+        .expect(0)
+        .mount_as_scoped(&app.email_server)
+        .await;
+
+    // Act
+    let o = BodyData::new(
+        "Newsletter title".into(),
+        Content {
+            text: "Newsletter body as plain text".into(),
+            html: "<p>Newsletter body as HTML</p>".into(),
+        },
+    );
+
+    let body = serde_urlencoded::to_string(o).unwrap();
+    let mut response = app.post_newsletters(&body).await;
+
+    // Asserts
+    assert_is_redirect_to(&response, "/admin/dashboard");
+    let mut dashboard_html = app.get_admin_dashboard_html().await;
+    assert!(dashboard_html.contains("Successfully sent out newsletter"));
+
+    // post again
+    response = app.post_newsletters(&body).await;
+    dashboard_html = app.get_admin_dashboard_html().await;
+    assert!(dashboard_html.contains("Successfully sent out newsletter"));
+
+    let received_requests = &app.email_server.received_requests().await.unwrap();
+    assert_eq!(received_requests.len(), 1);
 }

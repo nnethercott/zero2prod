@@ -1,5 +1,5 @@
-use crate::utils::{e500, see_other};
-use actix_web::{http::header::ContentType, web, HttpResponse};
+use crate::{authentication::middleware::UserId, utils::{e500, see_other}};
+use actix_web::{http::header::ContentType, web::{self, ReqData}, HttpResponse};
 use actix_web_flash_messages::IncomingFlashMessages;
 use anyhow::Context;
 use sqlx::PgPool;
@@ -9,24 +9,19 @@ use std::fmt::Write;
 use crate::session_state::TypedSession;
 
 pub async fn admin_dashboard(
-    session: TypedSession,
     db_pool: web::Data<PgPool>,
     flash_messages: IncomingFlashMessages,
+    user_id: ReqData<UserId>,
 ) -> Result<HttpResponse, actix_web::Error> {
     let mut msg_html = "".to_string();
     for m in flash_messages.iter() {
         writeln!(msg_html, "<p><i>{}</i></p>", m.content()).unwrap();
     }
 
-    let username = {
-        if let Some(user_id) = session.get_user_id().map_err(e500)? {
-            get_username(db_pool.as_ref(), user_id)
+    let username = get_username(db_pool.as_ref(), *user_id.into_inner())
                 .await
-                .map_err(e500)?
-        } else {
-            return Ok(see_other("/login"));
-        }
-    };
+                .map_err(e500)?;
+
     Ok(HttpResponse::Ok()
         .content_type(ContentType::html())
         .body(format!(

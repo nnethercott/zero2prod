@@ -1,8 +1,9 @@
 use crate::{
-    authentication::Credentials,
+    authentication::{middleware::UserId, Credentials},
     domain::SubscriberEmail,
     email_client::EmailClient,
-    idempotency::IdempotencyKey,
+    idempotency::{get_saved_response, save_response, IdempotencyKey},
+    session_state::TypedSession,
     utils::{e400, e500, see_other},
 };
 use actix_web::{
@@ -87,13 +88,25 @@ pub async fn publish_newsletter<'a>(
     form: web::Form<BodyData>,
     email_client: web::Data<EmailClient>,
     request: HttpRequest,
+    user_id: web::ReqData<UserId>,
 ) -> Result<HttpResponse, actix_web::Error> {
+    // idempotency check
     let BodyData {
         title,
         content,
         idempotency_key,
     } = form.0;
+
     let idempotency_key: IdempotencyKey = idempotency_key.try_into().map_err(e400)?;
+    let user_id = user_id.into_inner();
+
+    if let Some(cached_response) = get_saved_response(&pool, idempotency_key.as_ref(), *user_id)
+        .await
+        .map_err(e500)?
+    {
+        FlashMessage::info("Newsletter has already been published!");
+        return Ok(cached_response);
+    }
 
     let subscribers = get_confirmed_subscribers(pool.as_ref())
         .await
@@ -109,7 +122,10 @@ pub async fn publish_newsletter<'a>(
                     .with_context(|| format!("failed to send email to {:?}", sub.email))
                     .map_err(e500)?;
 
-                // TODO: cache response
+                // FIXME: cache response
+                save_response(&pool, idempotency_key.as_ref(), *user_id, response)
+                    .await
+                    .map_err(e500)?;
             }
             Err(_) => {
                 tracing::warn!("invalid email retrieved from db");

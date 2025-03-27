@@ -2,8 +2,7 @@ use crate::{
     authentication::{middleware::UserId, Credentials},
     domain::SubscriberEmail,
     email_client::EmailClient,
-    idempotency::{get_saved_response, save_response, IdempotencyKey},
-    session_state::TypedSession,
+    idempotency::{save_response, try_processing, IdempotencyKey, NextAction},
     utils::{e400, e500, see_other},
 };
 use actix_web::{
@@ -100,13 +99,18 @@ pub async fn publish_newsletter<'a>(
     let idempotency_key: IdempotencyKey = idempotency_key.try_into().map_err(e400)?;
     let user_id = user_id.into_inner();
 
-    if let Some(cached_response) = get_saved_response(&pool, idempotency_key.as_ref(), *user_id)
+    let success_message = || FlashMessage::info("Successfully sent out newsletter");
+
+    let transaction = match try_processing(&pool, &idempotency_key, *user_id)
         .await
         .map_err(e500)?
     {
-        FlashMessage::info("Newsletter has already been published!");
-        return Ok(cached_response);
-    }
+        NextAction::StartProcessing(t) => t,
+        NextAction::ReturnSavedResponse(cached_response) => {
+            success_message().send();
+            return Ok(cached_response);
+        }
+    };
 
     let subscribers = get_confirmed_subscribers(pool.as_ref())
         .await
@@ -116,15 +120,10 @@ pub async fn publish_newsletter<'a>(
     for subscriber in subscribers {
         match subscriber {
             Ok(sub) => {
-                let response = email_client
+                let _ = email_client
                     .send_email(&sub.email, &title, &content.text, &content.html)
                     .await
                     .with_context(|| format!("failed to send email to {:?}", sub.email))
-                    .map_err(e500)?;
-
-                // FIXME: cache response
-                save_response(&pool, idempotency_key.as_ref(), *user_id, response)
-                    .await
                     .map_err(e500)?;
             }
             Err(_) => {
@@ -134,9 +133,14 @@ pub async fn publish_newsletter<'a>(
     }
 
     // add a flash message
-    FlashMessage::info("Successfully sent out newsletter").send();
+    success_message().send(); 
 
-    Ok(see_other("/admin/dashboard"))
+    let response = see_other("/admin/dashboard");
+    let response = save_response(transaction, &idempotency_key, *user_id, response)
+        .await
+        .map_err(e500)?;
+
+    Ok(response)
 }
 
 #[tracing::instrument(name = "get all subscribers with `confirmed` status", skip(pool))]

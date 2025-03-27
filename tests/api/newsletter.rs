@@ -1,15 +1,12 @@
 use serde_json::json;
 use uuid::Uuid;
 use wiremock::{
-    matchers::{any, header, method, path},
+    matchers::{any, method, path},
     Mock, ResponseTemplate,
 };
 use zero2prod::routes::{BodyData, Content};
 
-use crate::{
-    helpers::{assert_is_redirect_to, spawn_app, ConfirmationLinks, TestApp},
-    newsletter,
-};
+use crate::helpers::{assert_is_redirect_to, spawn_app, ConfirmationLinks, TestApp};
 
 // #[tokio::test]
 // #[ignore]

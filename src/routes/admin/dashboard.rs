@@ -1,4 +1,4 @@
-use crate::{authentication::middleware::UserId, utils::{e500, see_other}};
+use crate::{authentication::middleware::UserId, utils::e500};
 use actix_web::{http::header::ContentType, web::{self, ReqData}, HttpResponse};
 use actix_web_flash_messages::IncomingFlashMessages;
 use anyhow::Context;
@@ -6,7 +6,6 @@ use sqlx::PgPool;
 use uuid::Uuid;
 use std::fmt::Write;
 
-use crate::session_state::TypedSession;
 
 pub async fn admin_dashboard(
     db_pool: web::Data<PgPool>,

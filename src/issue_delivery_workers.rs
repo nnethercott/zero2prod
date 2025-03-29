@@ -1,17 +1,14 @@
 use sqlx::{Executor, PgPool, PgTransaction};
 use uuid::Uuid;
 
-use crate::{
-    domain::SubscriberEmail,
-    email_client::{EmailClient},
-};
+use crate::{domain::SubscriberEmail, email_client::EmailClient};
 
 //NOTE: we're using updates on table state to drive email send job to completion
 pub async fn try_execute_task(
     pool: &PgPool,
     email_client: &EmailClient,
 ) -> Result<(), anyhow::Error> {
-    if let Some((transaction, issue_id, email)) = dequeue_task(pool).await? {
+    if let Some((mut transaction, issue_id, email, retries)) = dequeue_task(pool).await? {
         match SubscriberEmail::parse(email.clone()) {
             Ok(email) => {
                 // NOTE: we only perform second query if email valid !
@@ -26,11 +23,14 @@ pub async fn try_execute_task(
                     )
                     .await
                 {
-                    // tracing failed to send
+                    // increment retries and bail
+                    increment_retries(&mut transaction, issue_id, email.as_ref(), retries).await?;
+                    transaction.rollback().await?;
+                    return Ok(());
                 }
             }
             Err(e) => {
-                // tracing invalid email
+                // tracing invalid email -- we'd wanna delete the task
             }
         }
 
@@ -41,11 +41,13 @@ pub async fn try_execute_task(
 
 // NOTE: - we wanna create a new transaction PER dequeue_task
 // - return Result<Option ... since a) query could fail, and b) may be no rows left
-async fn dequeue_task(pool: &PgPool) -> Result<Option<(PgTransaction, Uuid, String)>, sqlx::Error> {
+async fn dequeue_task(
+    pool: &PgPool,
+) -> Result<Option<(PgTransaction, Uuid, String, i32)>, sqlx::Error> {
     let mut transaction = pool.begin().await?;
     let r = sqlx::query!(
         r#"
-        SELECT issue_id, email
+        SELECT issue_id, email, retries
         FROM issue_delivery_queue
         FOR UPDATE
         SKIP LOCKED
@@ -56,7 +58,12 @@ async fn dequeue_task(pool: &PgPool) -> Result<Option<(PgTransaction, Uuid, Stri
     .await?;
 
     if let Some(r) = r {
-        Ok(Some((transaction, r.issue_id, r.email)))
+        Ok(Some((
+            transaction,
+            r.issue_id,
+            r.email,
+            r.retries.unwrap_or(0)
+        )))
     } else {
         Ok(None)
     }
@@ -108,4 +115,21 @@ async fn get_issue(
     .await?;
 
     Ok(issue)
+}
+
+async fn increment_retries(
+    transaction: &mut PgTransaction<'_>,
+    issue_id: Uuid,
+    email: &str,
+    n_retries: i32,
+) -> Result<(), sqlx::Error> {
+    let query = sqlx::query!(r#"
+        UPDATE issue_delivery_queue
+        SET retries = $3 
+        WHERE issue_id = $1 AND
+        email = $2 
+    "#, issue_id, email, n_retries);
+
+    transaction.execute(query).await?;
+    Ok(())
 }

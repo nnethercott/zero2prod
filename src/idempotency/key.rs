@@ -30,3 +30,14 @@ impl AsRef<str> for IdempotencyKey{
         &self.0
     }
 }
+
+
+// automatic try from 
+// impl<T, U> TryInto<U> for T
+// where U: TryFrom<T>{
+//     type Error = <U as TryFrom<T>>::Error;
+//
+//     fn try_into(self) -> Result<U, Self::Error> {
+//         U::try_from(self)
+//     }
+// }

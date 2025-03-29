@@ -34,7 +34,7 @@ then
         -e POSTGRES_HOST=${DB_HOST} \
         -e POSTGRES_PORT=${DB_PORT} \
         -p ${DB_PORT}:${DB_PORT} \
-        -d postgres \
+        -d postgres:latest \
         postgres -N 1000
 fi
 

@@ -1,5 +1,9 @@
 use zero2prod::{
-    self, Application, configuration::get_configuration, telemetry::{get_subscriber, init_subscriber}
+    self,
+    configuration::get_configuration,
+    issue_delivery_workers::run_worker_until_stopped,
+    telemetry::{get_subscriber, init_subscriber},
+    Application,
 };
 
 #[tokio::main]
@@ -8,7 +12,18 @@ async fn main() -> Result<(), std::io::Error> {
     init_subscriber(subscriber);
 
     let settings = get_configuration().expect("couldn't read settings");
-    let application = Application::build(settings).await?;
+    let application = tokio::spawn(
+        Application::build(settings.clone())
+            .await?
+            .run_until_stopped(),
+    );
 
-    application.run_until_stopped().await
+    let worker = tokio::spawn(run_worker_until_stopped(settings));
+
+    // NOTE: we run until either the app OR the worker finishes !
+    tokio::select! {
+        _ = application => {},
+        _ = worker => {},
+    };
+    Ok(())
 }

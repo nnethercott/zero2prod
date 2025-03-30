@@ -1,20 +1,59 @@
+use std::time::Duration;
+
 use sqlx::{Executor, PgPool, PgTransaction};
 use uuid::Uuid;
 
-use crate::{domain::SubscriberEmail, email_client::EmailClient};
+use crate::{configuration::Settings, domain::SubscriberEmail, email_client::{EmailClient}, get_connection_pool};
+
+pub enum ExecutionOutcome{
+    EmptyQueue, 
+    TaskCompleted,
+    TaskFailed
+}
+
+pub async fn run_worker_until_stopped(config: Settings){
+    let pool = get_connection_pool(&config.database);
+    let email_client = config.email_client.client().expect("failed to parse email");
+
+    let _ = worker_loop(&pool, &email_client).await;
+}
+
+// should this be yielding stuff for listensers?
+pub async fn worker_loop(
+    pool: &PgPool,
+    email_client: &EmailClient,
+)->Result<(), anyhow::Error>{
+    loop{
+        match try_execute_task(pool, email_client).await {
+            Ok(ExecutionOutcome::EmptyQueue) => {
+                tokio::time::sleep(Duration::from_secs(10)).await;
+            }, 
+            Err(_) => {
+                tokio::time::sleep(Duration::from_secs(1)).await;
+            }
+            _ => {}
+        };
+    }
+}
 
 //NOTE: we're using updates on table state to drive email send job to completion
 pub async fn try_execute_task(
     pool: &PgPool,
     email_client: &EmailClient,
-) -> Result<(), anyhow::Error> {
-    if let Some((mut transaction, issue_id, email, retries)) = dequeue_task(pool).await? {
+) -> Result<ExecutionOutcome, anyhow::Error> {
+    let task = dequeue_task(pool).await?;
+    
+    if task.is_none(){
+        return Ok(ExecutionOutcome::EmptyQueue);
+    }
+
+    if let Some((mut transaction, issue_id, email, retries)) = task {
         match SubscriberEmail::parse(email.clone()) {
             Ok(email) => {
                 // NOTE: we only perform second query if email valid !
-                let issue = get_issue(pool, &email_client, issue_id, email.as_ref()).await?;
+                let issue = get_issue(pool).await?;
 
-                if let Err(e) = email_client
+                if let Err(_) = email_client
                     .send_email(
                         &email,
                         &issue.title,
@@ -26,17 +65,17 @@ pub async fn try_execute_task(
                     // increment retries and bail
                     increment_retries(&mut transaction, issue_id, email.as_ref(), retries).await?;
                     transaction.rollback().await?;
-                    return Ok(());
+                    return Ok(ExecutionOutcome::TaskFailed);
                 }
             }
-            Err(e) => {
+            Err(_) => {
                 // tracing invalid email -- we'd wanna delete the task
             }
         }
 
         delete_task(transaction, issue_id, &email).await?;
     }
-    Ok(())
+    Ok(ExecutionOutcome::TaskCompleted)
 }
 
 // NOTE: - we wanna create a new transaction PER dequeue_task
@@ -97,9 +136,6 @@ struct NewsletterIssue {
 
 async fn get_issue(
     pool: &PgPool,
-    email_client: &EmailClient,
-    issue_id: Uuid,
-    email: &str,
 ) -> Result<NewsletterIssue, anyhow::Error> {
     let issue = sqlx::query_as!(
         NewsletterIssue,

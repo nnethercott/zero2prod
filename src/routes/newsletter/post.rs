@@ -52,6 +52,7 @@ impl BodyData {
     }
 }
 
+#[allow(dead_code)]
 pub struct ConfirmedSubscriber {
     email: SubscriberEmail,
 }

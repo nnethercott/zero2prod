@@ -14,7 +14,7 @@ use actix_web::{dev::Server, web, App, HttpRequest, HttpResponse, HttpServer, Re
 
 use crate::authentication::middleware::reject_anonymous_users;
 use crate::configuration::{DatabaseSettings, Settings};
-use crate::email_client::EmailClient;
+use crate::email_client::{EmailClient};
 use crate::routes::*;
 
 pub fn get_connection_pool(config: &DatabaseSettings) -> PgPool {
@@ -33,14 +33,7 @@ impl Application {
     pub async fn build(settings: Settings) -> Result<Self, std::io::Error> {
         let db_pool = get_connection_pool(&settings.database);
 
-        let sender_email = settings.email_client.sender().expect("invalid email");
-        let timeout = settings.email_client.timeout();
-        let email_client = EmailClient::new(
-            settings.email_client.base_url,
-            sender_email,
-            settings.email_client.auth_token,
-            timeout,
-        );
+        let email_client = settings.email_client.client().expect("failed");
 
         let app_settings = settings.app;
         let address = format!("{}:{}", app_settings.host, app_settings.port);
@@ -123,7 +116,7 @@ pub async fn run(
                     .route("/password", web::post().to(change_password))
                     .route("/logout", web::post().to(logout))
                     .route("/newsletters", web::get().to(create_newsletter))
-                    .route("/newsletters", web::post().to(publish_newsletter))
+                    .route("/newsletters", web::post().to(publish_newsletter)),
             )
     })
     .listen(listener)?

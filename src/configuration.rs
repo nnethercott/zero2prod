@@ -88,7 +88,7 @@ impl Environment {
     pub fn to_string(&self) -> String {
         match self {
             Environment::Local => "local".to_string(),
-            Environment::Production => "Production".to_string(),
+            Environment::Production => "production".to_string(),
         }
     }
 }

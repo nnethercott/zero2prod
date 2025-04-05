@@ -39,6 +39,10 @@ impl EmailClient {
         }
     }
 
+    #[tracing::instrument(
+        name = "postmark POST",
+        skip(recipient, subject, html_content, text_content)
+    )]
     pub async fn send_email(
         &self,
         recipient: &SubscriberEmail,

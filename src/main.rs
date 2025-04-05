@@ -1,3 +1,4 @@
+use secrecy::ExposeSecret;
 use zero2prod::{
     self,
     configuration::get_configuration,
@@ -17,6 +18,9 @@ async fn main() -> Result<(), std::io::Error> {
             .await?
             .run_until_stopped(),
     );
+    
+    dbg!(&settings);
+    dbg!(&settings.email_client.auth_token.expose_secret());
 
     let worker = tokio::spawn(run_worker_until_stopped(settings));
 

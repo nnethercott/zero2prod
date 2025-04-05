@@ -123,26 +123,6 @@ pub async fn publish_newsletter<'a>(
         .context("failed to enqueue delivery task")
         .map_err(e500)?;
 
-    // let subscribers = get_confirmed_subscribers(pool.as_ref())
-    //     .await
-    //     .context("failed to retrieve confirmed subs")
-    //     .map_err(e500)?;
-    //
-    // for subscriber in subscribers {
-    //     match subscriber {
-    //         Ok(sub) => {
-    //             let _ = email_client
-    //                 .send_email(&sub.email, &title, &content.text, &content.html)
-    //                 .await
-    //                 .with_context(|| format!("failed to send email to {:?}", sub.email))
-    //                 .map_err(e500)?;
-    //         }
-    //         Err(_) => {
-    //             tracing::warn!("invalid email retrieved from db");
-    //         }
-    //     }
-    // }
-
     let response = see_other("/admin/dashboard");
     let response = save_response(transaction, &idempotency_key, *user_id, response)
         .await

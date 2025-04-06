@@ -107,7 +107,7 @@ pub async fn subscribe<'a>(
         .await
         .context("failed to commit postgres transaction")?;
 
-    send_confirmation_email(&email_client, subscriber, &base_url.0, &token)
+   send_confirmation_email(&email_client, subscriber, &base_url.0, &token)
         .await
         .context("failed to send confirmation email")?;
 

@@ -8,8 +8,8 @@ database:
   password: "password"
   database_name: "newsletter"
 email_client:
-  sender_email: "nate@gmail.com"
-  base_url: "https://api.postmarkapp.com/email"
-  auth_token: "secret-token"
+  sender_email: "nathaniel.nethercott@deepomatic.com"
+  base_url: "https://api.postmarkapp.com"
+  auth_token: secret-token
   timeout_milliseconds: 10000
 redis_uri: "redis://127.0.0.1:6379"
